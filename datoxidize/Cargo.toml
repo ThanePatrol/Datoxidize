@@ -1,0 +1,18 @@
+[package]
+name = "datoxidize"
+version = "0.1.0"
+edition = "2021"
+description = "Sync your files between your devices"
+readme = "README.md"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rayon="1.6.0"
+serde = { version = "1.0.148", default-features = false, features = ["derive"] }
+serde_json = "1.0.89"
+dotenvy = "0.15.6"
+tokio = { version = "1.22.0", features = ["full"] }
+rustls = "0.20.7"
+notify = "5.0.0"
