@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 
 #[tokio::main]
 pub async fn init_web_server() {
+    tracing_subscriber::fmt::init();
 
     // build our application with a route
     let app = Router::new()
