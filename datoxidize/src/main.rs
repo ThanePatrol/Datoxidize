@@ -1,6 +1,5 @@
 mod web_server;
 
-use std::fs::File;
 use std::path::Path;
 use notify::*;
 use std::sync::mpsc::channel;
@@ -16,6 +15,8 @@ fn main() {
     //start channel for passing messages
     let (tx, rx) = channel();
 
+    //todo - set duration::from_secs() from user preferences
+    //create recommended watcher for a particular platform
     let mut watcher: Box<dyn Watcher> = if RecommendedWatcher::kind() == WatcherKind::PollWatcher {
         let config = Config::default()
             .with_poll_interval(Duration::from_secs(1));
@@ -32,8 +33,6 @@ fn main() {
         let e = event.unwrap();
 
         if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = e.kind {
-            //print!("{:?}", e);
-            //print!("{:?}", e.paths);
             let start = SystemTime::now();
             sync_file_to_local(e);
             let end = SystemTime::now();
@@ -56,6 +55,10 @@ fn sync_file_to_local(event: Event) {
 fn sync_file_to_remote(event: Event) {
     let file_name = event.paths[0].file_name().unwrap();
     let data = fs::read(event.paths[0].as_path()).expect("");
-    let raw_file_json = F
+    //let raw_file_json = F
+}
+
+pub fn get_file_from_database() -> String {
+    fs::read_to_string("./copy_dir/test").expect("")
 }
 

@@ -6,6 +6,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use serde_json::{json, Value};
+use crate::get_file_from_database;
 
 #[tokio::main]
 pub async fn init_web_server() {
@@ -16,7 +18,10 @@ pub async fn init_web_server() {
         // `GET /` goes to `root`
         .route("/", get(root))
         // `POST /users` goes to `create_user`
-        .route("/test", post(sync_file));
+        .route("/test", post(sync_file))
+        // 'GET /show' will display the content posted in /test
+        .route("/show", get(get_synced_file));
+
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -42,6 +47,11 @@ async fn sync_file(Json(payload): Json<FileRaw>) -> impl IntoResponse {
 
     //converted
     (StatusCode::CREATED, Json(file))
+}
+
+async fn get_synced_file() -> Json<Value> {
+    let file = get_file_from_database();
+    Json(json!(file))
 }
 
 //the input for the sync_file function
