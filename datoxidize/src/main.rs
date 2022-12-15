@@ -1,13 +1,10 @@
-mod web_server;
 mod sync_logic;
 
 use std::path::Path;
 use notify::*;
-use std::sync::mpsc::channel;
-use std::time::{Duration, SystemTime};
-use notify::event::{AccessKind, AccessMode};
+use std::time::{Duration};
 use std::fs;
-use crate::sync_logic::{DirectorySettings, sync_directory};
+use crate::sync_logic::{deserialize_config, DirectoryConfig, serialize_config_settings, sync_changed_file};
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -16,10 +13,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use notify::event::CreateKind::Folder;
+use notify::EventKind::Create;
 use serde_json::{json, Value};
 
 #[tokio::main]
-async fn main() -> Result<()>{
+async fn main() -> Result<()> {
     //init environment variables
     dotenvy::dotenv().unwrap();
 
@@ -34,55 +33,38 @@ async fn main() -> Result<()>{
         // 'GET /show' will display the content posted in /test
         .route("/show", get(get_synced_file));
 
-    let CONFIG_PATH = "./example_dir";
-
-    println!("waiting");
-
     // listening on localhost
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
 
-    //todo - Load these settings from a config.json file
-    //Create DirectorySettings
-    let dir_settings = DirectorySettings::new(
-        "./example_dir".to_string(), 1, 1);
+    let dir_settings = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+    let watched_dir = &dir_settings.content_directory.clone();
 
+    //todo - create a atomic boolean value to limit writes in short succession
+    //todo - use a timer to determine when file was last modified
+    //todo - if there is another event before this timer reaches 0, reset the timer
+    //todo - so if a file is edited many times it will only be synced after a period of inactivity
 
     //NB - This watcher needs to be initiated like this to allow for asynchronous runtime be
     //between web server and notifications
-
     let mut watcher =
-        // To make sure that the config lives as long as the function
-        // we need to move the ownership of the config inside the function
-        // To learn more about move please read [Using move Closures with Threads](https://doc.rust-lang.org/book/ch16-01-threads.html?highlight=move#using-move-closures-with-threads)
         RecommendedWatcher::new(move |result: Result<Event>| {
             let event = result.unwrap();
 
             if event.kind.is_modify() {
-                sync_directory(event, &dir_settings);
+                sync_changed_file(event, &dir_settings);
+            } else if event.kind.is_create()  && event.kind == Create(Folder) {
+                sync_logic::get_new_remote_directory_path(event.paths[0].as_path().to_str().unwrap().to_string(),
+                                                          &dir_settings);
+            } else if event.kind.is_remove() {
+                println!("{event:?}");
             }
         },notify::Config::default()
-            .with_poll_interval(Duration::from_secs(1)))?;
+                                    .with_poll_interval(Duration::from_secs(1)))?;
 
-    watcher.watch(Path::new(CONFIG_PATH), RecursiveMode::Recursive)?;
+    watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive)?;
+    //todo - set duration::from_secs() from user preferences.
 
-    //todo - set duration::from_secs() from user preferences
-
-    println!("watching");
-    // Main event loop, will loop forever and call syncing functions
-    //for event in rx {
-    //    let e = event.unwrap();
-    //    println!("{:?}", e);
-    //    if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = e.kind {
-    //        let start = SystemTime::now();
-    //        sync_logic::sync_directory(e, &dir_settings);
-    //        println!("synced");
-    //        let end = SystemTime::now();
-    //        let time = end.duration_since(start).unwrap();
-    //        println!("{:?}", time);
-    //    }
-//
-    //}
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await.unwrap();
@@ -122,21 +104,86 @@ struct FileHumanReadable {
     content: String,
 }
 
-fn sync_file_to_local(event: Event) {
-    let file_name = event.paths[0].file_name().unwrap();
-    let data = fs::read(event.paths[0].as_path()).expect("");
-    let sync_path = "./copy_dir/".to_string() + file_name.to_str().unwrap();
-    println!("sync: {}", sync_path);
-    fs::write(sync_path, data).expect("Error syncing data");
-}
-
-fn sync_file_to_remote(event: Event) {
-    let file_name = event.paths[0].file_name().unwrap();
-    let data = fs::read(event.paths[0].as_path()).expect("");
-    //let raw_file_json = F
-}
-
 pub fn get_file_from_database() -> String {
     fs::read_to_string("./copy_dir/test").expect("")
 }
 
+#[cfg(test)]
+///Current unit tests cover:
+/// 1. Making a new directory
+/// 2. Syncing file content with a watcher
+mod tests {
+    use std::thread;
+    use crate::sync_logic::{create_new_remote_directory, get_new_remote_directory_path};
+    use super::*;
+
+
+    #[test]
+    fn test_make_new_directory_remote() {
+        println!("Test");
+        let directory_path_to_watch = "example_dir";
+        //Create DirectorySettings
+        let dir_settings = DirectoryConfig::new(
+            directory_path_to_watch.to_string(), 1, Duration::from_secs(1));
+
+        let mut new_dir_path = dotenvy::var("TEST_DIRECTORY").unwrap();
+        new_dir_path.push_str("testing");
+
+        std::fs::create_dir(new_dir_path.clone()).expect("Error creating dir");
+        let new_remote_dir = get_new_remote_directory_path(new_dir_path.clone(), &dir_settings);
+        create_new_remote_directory(new_remote_dir.clone());
+
+        let path_remote = Path::new(&new_remote_dir).file_name().unwrap();
+        let path_local = Path::new(&new_dir_path).file_name().unwrap();
+
+        assert_eq!(path_local, path_remote);
+        assert!(Path::new(&new_remote_dir).exists());
+
+        std::fs::remove_dir(new_dir_path).expect("");
+        std::fs::remove_dir(new_remote_dir).expect("");
+    }
+
+    #[test]
+    fn test_content_syncs_with_remote() {
+        //Create watcher boilerplate
+        let dir_settings = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let watched_dir = dir_settings.content_directory.clone();
+        let cloned_config = dir_settings.clone();
+        let mut watcher =
+            RecommendedWatcher::new(move |result: Result<Event>| {
+                let event = result.unwrap();
+
+                if event.kind.is_modify() {
+                    sync_changed_file(event, &dir_settings);
+                } else if event.kind.is_create()  && event.kind == Create(Folder) {
+                    sync_logic::get_new_remote_directory_path(event.paths[0].as_path().to_str().unwrap().to_string(),
+                                                              &dir_settings);
+                } else if event.kind.is_remove() {
+                    println!("{event:?}");
+                }
+            },notify::Config::default()
+                                        .with_poll_interval(Duration::from_secs(1))).unwrap();
+        watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive).unwrap();
+
+        let test_file = "test_content.txt";
+
+        let mut new_file_path = watched_dir;
+        new_file_path.push_str("/");
+        new_file_path.push_str(test_file);
+        let content = "This is a unit test";
+        std::fs::write(new_file_path.clone(), content).expect("unable to write file");
+        thread::sleep(Duration::from_millis(1001));
+
+
+        let mut sync_path = cloned_config.remote_relative_directory;
+        sync_path.push_str(cloned_config.content_directory.as_str());
+        sync_path.push_str("/");
+        sync_path.push_str(test_file);
+        let synced_content = std::fs::read_to_string(sync_path.clone()).unwrap();
+
+        assert_eq!(content, synced_content);
+        std::fs::remove_file(sync_path).unwrap();
+        std::fs::remove_file(new_file_path).unwrap();
+
+    }
+}
