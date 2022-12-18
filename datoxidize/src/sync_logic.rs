@@ -32,6 +32,8 @@ impl DirectoryConfig {
     }
 }
 
+//todo - where i got up to - figure out how to correctly copy across a file created inside a directory recursively
+//todo - create a function that converts the absolute path from the source to the relative path on the remote
 /// Takes an event and the directorySettings that the event corresponds to an syncs it with the remote
 pub fn sync_changed_file(event: Event, directory: &DirectoryConfig) {
     println!("{event:?}");
@@ -56,17 +58,18 @@ fn build_generic_remote_path(directory: &DirectoryConfig) -> String {
     remote_path
 }
 
-pub fn get_new_remote_directory_path(event_path: String, directory: &DirectoryConfig) -> String {
+fn get_new_remote_directory_path(event_path: String, directory: &DirectoryConfig) -> String {
     let mut new_dir_path = String::from(directory.remote_relative_directory.clone());
     new_dir_path.push_str(
         get_relative_string_path(
             event_path.as_str()
                     ,directory).as_str());
-
     new_dir_path
 }
 
-pub fn create_new_remote_directory(path: String) {
+pub fn create_new_remote_directory(event: Event, directory: &DirectoryConfig) {
+    let event_path = event.paths[0].as_path().to_str().unwrap().to_string();
+    let path = get_new_remote_directory_path(event_path, directory);
     std::fs::create_dir(path).expect("Error creating directory on remote");
 }
 
@@ -76,6 +79,7 @@ pub fn remove_file_from_remote(event: Event, directory: &DirectoryConfig) {
     std::fs::remove_file(remote_file_to_remove.clone()).expect("Couldn't remove file");
     println!("removed: {remote_file_to_remove:?}")
 }
+
 
 /// Gets the relative path based upon sync root
 /// eg if user syncs the /home/user/Documents directory which contains the folder /stuff

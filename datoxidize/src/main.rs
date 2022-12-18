@@ -4,7 +4,7 @@ use std::path::Path;
 use notify::*;
 use std::time::{Duration};
 use std::fs;
-use crate::sync_logic::{deserialize_config, DirectoryConfig, sync_changed_file};
+use crate::sync_logic::{create_new_remote_directory, deserialize_config, DirectoryConfig, sync_changed_file};
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -55,12 +55,7 @@ async fn main() -> Result<()> {
             if event.kind.is_modify() {
                 sync_changed_file(event, &dir_settings);
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                sync_logic::get_new_remote_directory_path(event.paths[0]
-                                                              .as_path()
-                                                              .to_str()
-                                                              .unwrap()
-                                                              .to_string(),
-                                                          &dir_settings);
+                create_new_remote_directory(event, &dir_settings);
             } else if event.kind == notify::EventKind::Remove(File) {
                 sync_logic::remove_file_from_remote(event, &dir_settings);
             }
@@ -195,7 +190,7 @@ mod tests {
     //#[test]
     fn test_create_and_delete_file() {
         let watcher = create_watcher();
-        watcher.
+
     }
 
     fn create_watcher() -> INotifyWatcher {
@@ -206,15 +201,10 @@ mod tests {
                 let event = result.unwrap();
 
                 if event.kind.is_modify() {
-                    sync_changed_file(event, &dir_settings);
+                    sync_logic::sync_changed_file(event, &dir_settings);
                 } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                    sync_logic::get_new_remote_directory_path(event.paths[0]
-                                                                  .as_path()
-                                                                  .to_str()
-                                                                  .unwrap()
-                                                                  .to_string(),
-                                                              &dir_settings);
-                } else if event.kind == notify::EventKind::Remove(File) {
+                    sync_logic::create_new_remote_directory(event, &dir_settings)
+                } else if event.kind.is_remove() {
                     sync_logic::remove_file_from_remote(event, &dir_settings);
                 }
             },notify::Config::default()
