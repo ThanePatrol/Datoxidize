@@ -32,19 +32,6 @@ impl DirectoryConfig {
     }
 }
 
-pub fn serialize_config_settings(config: &DirectoryConfig, path: String) -> Result<()> {
-    let mut serial = serde_json::to_string(config).unwrap();
-    let mut file = std::fs::File::create(path)?;
-    write!(file, "{}", serial).expect("Error serializing config");
-    Ok(())
-}
-
-pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
-    let mut json = String::new();
-    std::fs::File::open(path)?.read_to_string(&mut json)?;
-    Ok(serde_json::from_str(&json).unwrap())
-}
-
 /// Takes an event and the directorySettings that the event corresponds to an syncs it with the remote
 pub fn sync_changed_file(event: Event, directory: &DirectoryConfig) {
     println!("{event:?}");
@@ -84,7 +71,10 @@ pub fn create_new_remote_directory(path: String) {
 }
 
 pub fn remove_file_from_remote(event: Event, directory: &DirectoryConfig) {
-
+    let mut remote_file_to_remove = build_generic_remote_path(directory);
+    remote_file_to_remove.push_str(event.paths[0].file_name().unwrap().to_str().unwrap());
+    std::fs::remove_file(remote_file_to_remove.clone()).expect("Couldn't remove file");
+    println!("removed: {remote_file_to_remove:?}")
 }
 
 /// Gets the relative path based upon sync root
@@ -98,4 +88,17 @@ fn get_relative_string_path(root_path: &str, directory: &DirectoryConfig) -> Str
         ..root_path.len()];
 
     new_dir.to_string()
+}
+
+pub fn _serialize_config_settings(config: &DirectoryConfig, path: String) -> Result<()> {
+    let serial = serde_json::to_string(config).unwrap();
+    let mut file = std::fs::File::create(path)?;
+    write!(file, "{}", serial).expect("Error serializing config");
+    Ok(())
+}
+
+pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
+    let mut json = String::new();
+    std::fs::File::open(path)?.read_to_string(&mut json)?;
+    Ok(serde_json::from_str(&json).unwrap())
 }

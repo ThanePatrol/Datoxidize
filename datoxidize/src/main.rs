@@ -4,7 +4,7 @@ use std::path::Path;
 use notify::*;
 use std::time::{Duration};
 use std::fs;
-use crate::sync_logic::{deserialize_config, DirectoryConfig, serialize_config_settings, sync_changed_file};
+use crate::sync_logic::{deserialize_config, DirectoryConfig, sync_changed_file};
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -14,6 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use notify::event::CreateKind::Folder;
+use notify::event::RemoveKind::File;
 use notify::EventKind::Create;
 use serde_json::{json, Value};
 
@@ -54,10 +55,14 @@ async fn main() -> Result<()> {
             if event.kind.is_modify() {
                 sync_changed_file(event, &dir_settings);
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                sync_logic::get_new_remote_directory_path(event.paths[0].as_path().to_str().unwrap().to_string(),
+                sync_logic::get_new_remote_directory_path(event.paths[0]
+                                                              .as_path()
+                                                              .to_str()
+                                                              .unwrap()
+                                                              .to_string(),
                                                           &dir_settings);
-            } else if event.kind.is_remove() {
-                println!("{event:?}");
+            } else if event.kind == notify::EventKind::Remove(File) {
+                sync_logic::remove_file_from_remote(event, &dir_settings);
             }
         },notify::Config::default()
                                     .with_poll_interval(Duration::from_secs(1)))?;
@@ -185,5 +190,37 @@ mod tests {
         std::fs::remove_file(sync_path).unwrap();
         std::fs::remove_file(new_file_path).unwrap();
 
+    }
+
+    //#[test]
+    fn test_create_and_delete_file() {
+        let watcher = create_watcher();
+        watcher.
+    }
+
+    fn create_watcher() -> INotifyWatcher {
+        let dir_settings = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let watched_dir = dir_settings.content_directory.clone();
+        let mut watcher =
+            RecommendedWatcher::new(move |result: Result<Event>| {
+                let event = result.unwrap();
+
+                if event.kind.is_modify() {
+                    sync_changed_file(event, &dir_settings);
+                } else if event.kind.is_create()  && event.kind == Create(Folder) {
+                    sync_logic::get_new_remote_directory_path(event.paths[0]
+                                                                  .as_path()
+                                                                  .to_str()
+                                                                  .unwrap()
+                                                                  .to_string(),
+                                                              &dir_settings);
+                } else if event.kind == notify::EventKind::Remove(File) {
+                    sync_logic::remove_file_from_remote(event, &dir_settings);
+                }
+            },notify::Config::default()
+                                        .with_poll_interval(Duration::from_secs(1))).unwrap();
+
+        watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive).unwrap();
+        watcher
     }
 }
