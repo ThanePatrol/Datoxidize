@@ -56,7 +56,7 @@ fn build_root_remote_path(directory: &DirectoryConfig) -> String {
     remote_path.push_str(&directory.directory_id.to_string());
     remote_path.push('/');
     remote_path.push_str(&directory.content_directory);
-    remote_path.push('/');
+    //remote_path.push('/');
     remote_path
 }
 
@@ -136,6 +136,9 @@ pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
 
 #[cfg(test)]
 mod tests {
+    use rand::distributions::Standard;
+    use rand::{Rng, SeedableRng};
+    use rand::rngs::StdRng;
     use super::*;
 
     #[test]
@@ -143,13 +146,35 @@ mod tests {
         let local_path = String::from("./example_dir/test_build_dir/test");
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
-
-        std::fs::create_dir_all(local_path.clone()).unwrap();
-
         let full_path = build_full_remote_path(&local_path, &config);
-        println!("{}", full_path);
 
-        assert_eq!(full_path, "./copy_dir/dir1/test_build_dir/test".to_string())
+        assert_eq!(full_path, "./copy_dir/dir1/example_dir/test_build_dir/test".to_string())
+    }
 
+    #[test]
+    fn test_build_many_random_directories() {
+        let mut chars = "./example_dir/".chars().collect::<Vec<char>>();
+
+        for i in 0..1000 {
+            if i % 5 == 0 {
+                chars.push('/');
+                continue
+            }
+
+            let random_char: char = StdRng::from_entropy().sample(Standard);
+            if *chars.last().unwrap() == '/' && random_char == '/' {
+                continue
+            }
+            chars.push(random_char);
+        }
+        let mut local_path = chars.into_iter().collect::<String>();
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let full_path = build_full_remote_path(&local_path, &config);
+        local_path.remove(0);
+
+        //what the final remote path should be
+        let mut remote_path = String::from("./copy_dir/dir1");
+        remote_path.push_str(local_path.as_str());
+        assert_eq!(remote_path, full_path)
     }
 }
