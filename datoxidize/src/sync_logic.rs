@@ -61,6 +61,7 @@ pub fn create_folder_on_remote(events: &Vec<PathBuf>, directory: &DirectoryConfi
     }
 }
 
+/// Main public API for deleting files and folders
 pub fn remove_files_and_dirs_from_remote(events: &Vec<PathBuf>, directory: &DirectoryConfig) {
     for single_change in events {
         let file_to_remove = get_full_remote_path(
@@ -70,16 +71,11 @@ pub fn remove_files_and_dirs_from_remote(events: &Vec<PathBuf>, directory: &Dire
         if path.is_file() {
             std::fs::remove_file(path).expect("Error removing file");
         } else {
-            //todo - implement a recursive file and directory delete function
-            // recurse down until no more directories are found
-            // then delete every file in the directory and return
-            // keep doing this until you get to the final directory
             std::fs::remove_dir(path).expect("Error removing dir");
         }
     }
 }
 
-//fn recursive_delete_files(event: &PathBuf)
 
 /// Main API for building the remote path for any file or directory syncing
 /// Builds full directory as a string for a specific file or directory
