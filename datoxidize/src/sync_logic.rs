@@ -35,7 +35,7 @@ impl DirectoryConfig {
 
 /// Main public api for syncing a changed file to a remote dir
 /// Takes an event and the directorySettings that the event corresponds to an syncs it with the remote
-pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
+pub fn sync_changed_file(event: &Vec<PathBuf>, directory: &DirectoryConfig) {
     for single_change in event {
         let data_to_sync = std::fs::read(single_change.as_path())
             .expect("Error reading data to sync");
@@ -51,18 +51,17 @@ pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryC
 }
 
 /// Main public API for creating a folder
-pub fn create_folder_on_remote(events: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
+pub fn create_folder_on_remote(events: &Vec<PathBuf>, directory: &DirectoryConfig) {
     for single_change in events {
         let folder_to_add = get_full_remote_path(
             &single_change.as_os_str().to_str().unwrap().to_string(), directory);
 
         let path = PathBuf::from(folder_to_add);
         std::fs::create_dir_all(path).expect("Error creating directory");
-        println!("created files");
     }
 }
 
-pub fn remove_files_and_dirs_from_remote(events: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
+pub fn remove_files_and_dirs_from_remote(events: &Vec<PathBuf>, directory: &DirectoryConfig) {
     for single_change in events {
         let file_to_remove = get_full_remote_path(
             &single_change.as_os_str().to_str().unwrap().to_string(), directory);
@@ -75,7 +74,6 @@ pub fn remove_files_and_dirs_from_remote(events: &Vec<std::path::PathBuf>, direc
             // recurse down until no more directories are found
             // then delete every file in the directory and return
             // keep doing this until you get to the final directory
-            println!("removing dirs: {:?}", path);
             std::fs::remove_dir(path).expect("Error removing dir");
         }
     }

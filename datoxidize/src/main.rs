@@ -55,7 +55,6 @@ async fn main() -> Result<()> {
             if event.kind.is_modify() {
                 sync_changed_file(&event.paths, &dir_settings);
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                println!("{:?}", event);
                 create_folder_on_remote(&event.paths, &dir_settings);
             } else if event.kind.is_remove() {
                 sync_logic::remove_files_and_dirs_from_remote(&event.paths, &dir_settings);
