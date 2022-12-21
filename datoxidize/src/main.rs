@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
                 //create_new_remote_directory(event, &dir_settings);
             } else if event.kind == notify::EventKind::Remove(File) {
-                sync_logic::remove_file_from_remote(event, &dir_settings);
+                sync_logic::remove_files_and_dirs_from_remote(&event.paths, &dir_settings);
             }
         },notify::Config::default()
                                     .with_poll_interval(Duration::from_secs(1)))?;

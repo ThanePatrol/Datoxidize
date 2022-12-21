@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::time::Duration;
 use notify::*;
 use serde::{Deserialize, Serialize};
@@ -37,11 +38,10 @@ impl DirectoryConfig {
 pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
     println!("{event:?}");
     for single_change in event {
-        //let file_name = single_change.file_name().expect("Error reading source file path");
         let data_to_sync = std::fs::read(single_change.as_path())
             .expect("Error reading data to sync");
 
-        let remote_path = build_full_remote_path(
+        let remote_path = get_full_remote_path(
             &single_change.as_os_str().to_str().unwrap().to_string(),
             directory
         );
@@ -51,24 +51,25 @@ pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryC
     }
 }
 
-fn convert_event_paths(event_paths: &Vec<std::path::PathBuf>) -> Vec<String> {
-    event_paths.iter().map(|path| {
-        path.clone().into_os_string().into_string().unwrap()
-    }).collect::<Vec<String>>()
+pub fn remove_files_and_dirs_from_remote(events: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
+    for single_change in events {
+        let file_to_remove = get_full_remote_path(
+            &single_change.as_os_str().to_str().unwrap().to_string(), directory);
+
+        let path = PathBuf::from(file_to_remove);
+        if path.is_file() {
+            std::fs::remove_file(path).expect("Error removing file");
+        } else {
+            println!("removing dirs: {:?}", path);
+            std::fs::remove_dir_all(path).expect("Error removing dir");
+        }
+    }
 }
 
-pub fn remove_file_from_remote(event: Event, directory: &DirectoryConfig) {
-    let mut remote_file_to_remove = build_root_remote_path(directory);
-    remote_file_to_remove.push_str(event.paths[0].file_name().unwrap().to_str().unwrap());
-    std::fs::remove_file(remote_file_to_remove.clone()).expect("Couldn't remove file");
-    println!("removed: {remote_file_to_remove:?}")
-}
-
-//todo - convert all methods to use this method
 /// Main API for building the remote path for any file or directory syncing
 /// Builds full directory as a string for a specific file or directory
 /// Takes the event_path of the local event and a directory config
-fn build_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> String {
+fn get_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> String {
     let mut path = String::new();
     let root = build_root_remote_path(directory);
     path.push_str(root.as_str());
@@ -119,7 +120,7 @@ pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
 mod tests {
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
-    use rand::distributions::Standard;
+    use rand::distributions::{Alphanumeric, Standard};
     use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
     use super::*;
@@ -129,7 +130,7 @@ mod tests {
         let local_path = String::from("./example_dir/test_build_dir/test");
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
-        let full_path = build_full_remote_path(&local_path, &config);
+        let full_path = get_full_remote_path(&local_path, &config);
 
         assert_eq!(full_path, "./copy_dir/dir1/example_dir/test_build_dir/test".to_string())
     }
@@ -152,7 +153,7 @@ mod tests {
         }
         let mut local_path = chars.into_iter().collect::<String>();
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
-        let full_path = build_full_remote_path(&local_path, &config);
+        let full_path = get_full_remote_path(&local_path, &config);
         local_path.remove(0);
 
         //what the final remote path should be
@@ -178,5 +179,65 @@ mod tests {
 
         std::fs::remove_file(taxon).unwrap();
         std::fs::remove_file(nested).unwrap();
+    }
+
+    #[test]
+    fn remove_synced_file() {
+        let local_event_paths = vec![
+            PathBuf::from_str("./example_dir/Multimedia.tsv").unwrap(),
+            PathBuf::from_str("./example_dir/test/test_sync_remove.csv").unwrap()
+        ];
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        sync_changed_file(&local_event_paths, &config);
+
+        let taxon = Path::new("./copy_dir/dir1/example_dir/Multimedia.tsv");
+        let nested = Path::new("./copy_dir/dir1/example_dir/test/test_sync_remove.csv");
+        assert!(taxon.exists());
+        assert!(nested.exists());
+        remove_files_and_dirs_from_remote(&local_event_paths, &config);
+
+        assert!(!taxon.exists());
+        assert!(!nested.exists());
+    }
+
+    //todo - determine why the test is passing but there are still directories not being deleted
+    #[test]
+    fn remove_synced_directory() {
+        let mut root_local = "./example_dir/test".to_string();
+
+        for i in 0..10 {
+            if i % 5 == 0 {
+                root_local.push('/');
+                continue
+            }
+            let rand_str: String = (0..7).map(|_|
+                                          rand::thread_rng()
+                                              .sample(Alphanumeric) as char)
+                .collect();
+
+
+            root_local.push_str(rand_str.as_str());
+        }
+        let local_path = root_local;
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let remote_path_str = get_full_remote_path(
+            &local_path,
+            &config
+        );
+        let remote_path = Path::new(remote_path_str.as_str());
+        println!("remote path: {:?}", remote_path);
+
+
+        std::fs::create_dir_all(remote_path).unwrap();
+        assert!(remote_path.exists());
+        assert!(remote_path.is_dir());
+
+        std::thread::sleep(Duration::from_secs(5));
+        remove_files_and_dirs_from_remote(
+            &vec![PathBuf::from_str(remote_path_str.as_str()).unwrap()],
+            &config
+        );
+        assert!(!remote_path.exists());
+
     }
 }
