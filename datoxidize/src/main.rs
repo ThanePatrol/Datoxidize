@@ -4,7 +4,7 @@ use std::path::Path;
 use notify::*;
 use std::time::{Duration};
 use std::fs;
-use crate::sync_logic::{deserialize_config, sync_changed_file};
+use crate::sync_logic::{create_folder_on_remote, deserialize_config, sync_changed_file};
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -55,8 +55,9 @@ async fn main() -> Result<()> {
             if event.kind.is_modify() {
                 sync_changed_file(&event.paths, &dir_settings);
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                //create_new_remote_directory(event, &dir_settings);
-            } else if event.kind == notify::EventKind::Remove(File) {
+                println!("{:?}", event);
+                create_folder_on_remote(&event.paths, &dir_settings);
+            } else if event.kind.is_remove() {
                 sync_logic::remove_files_and_dirs_from_remote(&event.paths, &dir_settings);
             }
         },notify::Config::default()

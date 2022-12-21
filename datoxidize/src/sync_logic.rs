@@ -36,7 +36,6 @@ impl DirectoryConfig {
 /// Main public api for syncing a changed file to a remote dir
 /// Takes an event and the directorySettings that the event corresponds to an syncs it with the remote
 pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
-    println!("{event:?}");
     for single_change in event {
         let data_to_sync = std::fs::read(single_change.as_path())
             .expect("Error reading data to sync");
@@ -51,6 +50,18 @@ pub fn sync_changed_file(event: &Vec<std::path::PathBuf>, directory: &DirectoryC
     }
 }
 
+/// Main public API for creating a folder
+pub fn create_folder_on_remote(events: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
+    for single_change in events {
+        let folder_to_add = get_full_remote_path(
+            &single_change.as_os_str().to_str().unwrap().to_string(), directory);
+
+        let path = PathBuf::from(folder_to_add);
+        std::fs::create_dir_all(path).expect("Error creating directory");
+        println!("created files");
+    }
+}
+
 pub fn remove_files_and_dirs_from_remote(events: &Vec<std::path::PathBuf>, directory: &DirectoryConfig) {
     for single_change in events {
         let file_to_remove = get_full_remote_path(
@@ -60,11 +71,17 @@ pub fn remove_files_and_dirs_from_remote(events: &Vec<std::path::PathBuf>, direc
         if path.is_file() {
             std::fs::remove_file(path).expect("Error removing file");
         } else {
+            //todo - implement a recursive file and directory delete function
+            // recurse down until no more directories are found
+            // then delete every file in the directory and return
+            // keep doing this until you get to the final directory
             println!("removing dirs: {:?}", path);
-            std::fs::remove_dir_all(path).expect("Error removing dir");
+            std::fs::remove_dir(path).expect("Error removing dir");
         }
     }
 }
+
+//fn recursive_delete_files(event: &PathBuf)
 
 /// Main API for building the remote path for any file or directory syncing
 /// Builds full directory as a string for a specific file or directory
@@ -200,12 +217,12 @@ mod tests {
         assert!(!nested.exists());
     }
 
-    //todo - determine why the test is passing but there are still directories not being deleted
+    /// Checks if a single directory is deleted
     #[test]
     fn remove_synced_directory() {
         let mut root_local = "./example_dir/test".to_string();
 
-        for i in 0..10 {
+        for i in 0..5 {
             if i % 5 == 0 {
                 root_local.push('/');
                 continue
@@ -225,14 +242,12 @@ mod tests {
             &config
         );
         let remote_path = Path::new(remote_path_str.as_str());
-        println!("remote path: {:?}", remote_path);
 
 
         std::fs::create_dir_all(remote_path).unwrap();
         assert!(remote_path.exists());
         assert!(remote_path.is_dir());
 
-        std::thread::sleep(Duration::from_secs(5));
         remove_files_and_dirs_from_remote(
             &vec![PathBuf::from_str(remote_path_str.as_str()).unwrap()],
             &config
