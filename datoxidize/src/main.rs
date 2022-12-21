@@ -4,7 +4,7 @@ use std::path::Path;
 use notify::*;
 use std::time::{Duration};
 use std::fs;
-use crate::sync_logic::{create_new_remote_directory, deserialize_config, DirectoryConfig, sync_changed_file};
+use crate::sync_logic::{deserialize_config, sync_changed_file};
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -53,9 +53,9 @@ async fn main() -> Result<()> {
             let event = result.unwrap();
 
             if event.kind.is_modify() {
-                sync_changed_file(event, &dir_settings);
+                sync_changed_file(&event.paths, &dir_settings);
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
-                create_new_remote_directory(event, &dir_settings);
+                //create_new_remote_directory(event, &dir_settings);
             } else if event.kind == notify::EventKind::Remove(File) {
                 sync_logic::remove_file_from_remote(event, &dir_settings);
             }
@@ -108,6 +108,7 @@ pub fn get_file_from_database() -> String {
     fs::read_to_string("./copy_dir/test").expect("")
 }
 
+/*
 #[cfg(test)]
 ///Current unit tests cover:
 /// 1. Making a new directory
@@ -117,7 +118,7 @@ mod tests {
     use crate::sync_logic::{create_new_remote_directory};
     use super::*;
 
-    /*
+
     #[test]
     fn test_make_new_directory_remote() {
         println!("Test");
@@ -143,10 +144,8 @@ mod tests {
         std::fs::remove_dir(new_remote_dir).expect("");
     }
 
-     */
 
-    /*
-
+    // todo - update tests and/or methods to instantiate a simple custom watcher to use for tests
     #[test]
     fn test_content_syncs_with_remote() {
         //Create watcher boilerplate
@@ -219,6 +218,6 @@ mod tests {
         watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive).unwrap();
         watcher
     }
-
-     */
 }
+
+ */
