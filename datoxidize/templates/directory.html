@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+    <h1>Working directory</h1>
+    <div>
+        <ul>
+            {% for x in paths %}
+            <li><a href="{{x}}">{{ x }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

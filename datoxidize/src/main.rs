@@ -15,9 +15,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use notify::event::CreateKind::Folder;
-use notify::event::RemoveKind::File;
 use notify::EventKind::Create;
 use serde_json::{json, Value};
+use crate::gui::HtmlTemplate;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,7 +33,9 @@ async fn main() -> Result<()> {
         // `POST /users` goes to `create_user`
         .route("/test", post(sync_file))
         // 'GET /show' will display the content posted in /test
-        .route("/show", get(get_synced_file));
+        .route("/show", get(get_synced_file))
+        // GET show_dirs will show the current list of directories being watched
+        .route("/show_dirs", get(get_directories));
 
     // listening on localhost
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -66,10 +68,17 @@ async fn main() -> Result<()> {
     watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive)?;
     //todo - set duration::from_secs() from user preferences.
 
+    gui::test_print_html();
+
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await.unwrap();
+
     Ok(())
+}
+
+async fn get_directories() -> impl IntoResponse {
+    gui::test_render().await
 }
 
 async fn show_files() -> String {
