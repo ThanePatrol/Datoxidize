@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
         .route("/show_dirs", get(get_directories));
 
     // listening on localhost
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::debug!("listening on {}", addr);
 
     let dir_settings = deserialize_config("./test_resources/config.json".to_string()).unwrap();
