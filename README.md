@@ -27,3 +27,9 @@ These features are yet to be added. If you can see yourself adding one, create a
 #### 3. create gui clients
 - Start out with desktop clients
 - iOs/android to follow
+
+#### 4. initial sync
+- Do a scan of the directories that are watched, get the initial sync happening
+
+#### 5. Blacklist files
+- add methods to prevent certain files from being synced

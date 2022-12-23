@@ -1,3 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
+use std::fs::Metadata;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -31,6 +34,27 @@ impl DirectoryConfig {
             sync_frequency,
         }
     }
+}
+
+/// Public API that reads through directories and syncs files and directories
+/// Should only be done on startup
+pub fn initial_sync(directory: &DirectoryConfig) {
+    /// Read through files in local root directory, get the hash of the
+    fn get_hash_codes_of_local_with_files(local_path: &String) -> (Vec<Metadata>, Vec<String>) {
+        let mut metadata = Vec::new();
+        let mut files = Vec::new();
+        let dir_content = fs_extra::dir::get_dir_content(local_path).unwrap();
+        for file in dir_content.files {
+            files.push(file.clone());
+            let file_metadata = std::fs::metadata(file).unwrap();
+            metadata.push(file_metadata);
+        }
+        (metadata, files)
+    }
+    let data = get_hash_codes_of_local_with_files(&directory.content_directory);
+
+    //todo - copy over all data from example_dir to copy_dir on system load
+    println!("{:?}", data);
 }
 
 /// Main public api for syncing a changed file to a remote dir
@@ -85,7 +109,6 @@ fn get_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> Str
     let root = build_root_remote_path(directory);
     path.push_str(root.as_str());
     let dir_structure = build_directory_structure(&event_path, &directory.content_directory);
-    println!("{dir_structure}");
     path.push_str(dir_structure.as_str());
     path
 }
@@ -94,10 +117,11 @@ fn get_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> Str
 /// until the directory_root name is found
 /// NB as rsplit_once finds the last occurrence of the given &str and splits it there, one cannot
 /// have the same folder name
-fn build_directory_structure(event_path: &String, directory_root: &String) -> String {
+fn build_directory_structure(event_path: &String, content_directory_root: &String) -> String {
     let mut new_path = String::new();
     let full_event = event_path.clone();
-    let split_path = full_event.rsplit_once(directory_root.as_str()).unwrap();
+    let pattern = remove_path_approximate_from_config(&mut content_directory_root.clone());
+    let split_path = full_event.rsplit_once(pattern.as_str()).unwrap();
     new_path.push_str(split_path.1);
     new_path
 }
@@ -109,8 +133,18 @@ fn build_root_remote_path(directory: &DirectoryConfig) -> String {
     remote_path.push_str("dir");
     remote_path.push_str(&directory.directory_id.to_string());
     remote_path.push('/');
-    remote_path.push_str(&directory.content_directory);
+    let parent_dir = remove_path_approximate_from_config(&mut directory.content_directory.clone());
+    remote_path.push_str(&parent_dir);
     remote_path
+}
+
+/// config stores a path in a `./dir` manner, the slash and dot need to be removed
+fn remove_path_approximate_from_config(relative_dir: &mut String) -> String {
+    if relative_dir.starts_with("./") {
+        relative_dir.remove(0);
+        relative_dir.remove(0);
+    }
+    relative_dir.to_string()
 }
 
 pub fn _serialize_config_settings(config: &DirectoryConfig, path: String) -> Result<()> {

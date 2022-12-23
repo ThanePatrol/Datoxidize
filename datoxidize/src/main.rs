@@ -1,5 +1,5 @@
 mod sync_logic;
-mod gui;
+mod html_creation;
 
 use std::path::Path;
 use notify::*;
@@ -17,7 +17,7 @@ use std::net::SocketAddr;
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
 use serde_json::{json, Value};
-use crate::gui::HtmlTemplate;
+use crate::html_creation::HtmlTemplate;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -44,6 +44,8 @@ async fn main() -> Result<()> {
     let dir_settings = deserialize_config("./test_resources/config.json".to_string()).unwrap();
     let watched_dir = &dir_settings.content_directory.clone();
 
+    sync_logic::initial_sync(&dir_settings);
+
     //todo - create a atomic boolean value to limit writes in short succession
     //todo - use a timer to determine when file was last modified
     //todo - if there is another event before this timer reaches 0, reset the timer
@@ -68,7 +70,7 @@ async fn main() -> Result<()> {
     watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive)?;
     //todo - set duration::from_secs() from user preferences.
 
-    gui::test_print_html();
+    //html_creation::test_print_html();
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
@@ -78,7 +80,7 @@ async fn main() -> Result<()> {
 }
 
 async fn get_directories() -> impl IntoResponse {
-    gui::test_render().await
+    html_creation::test_render().await
 }
 
 async fn show_files() -> String {
