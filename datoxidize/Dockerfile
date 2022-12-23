@@ -1,4 +1,4 @@
-FROM rust:1.61.0 as builder
+FROM rust:1.61.0-slim as builder
 
 # Create new empty project
 RUN USER=root cargo new --bin datoxidize
@@ -25,6 +25,13 @@ COPY ./test_resources ./test_resources
 
 # build for release by removing initial build then adding cargo dependencies
 RUN rm ./target/release/deps/datoxidize*
-RUN cargo install --path .
+RUN cargo build --release
 
-CMD ["datoxidize"]
+# final base
+FROM rust:1.61.0
+
+# copy build artifact from build stage
+COPY --from=builder /datoxidize/target/release/datoxidize .
+
+# startup command to run the binary
+CMD ["./datoxidize"]
