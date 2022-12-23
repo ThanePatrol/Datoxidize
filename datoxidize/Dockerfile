@@ -35,3 +35,5 @@ COPY --from=builder /datoxidize/target/release/datoxidize .
 
 # startup command to run the binary
 CMD ["./datoxidize"]
+
+# https://dev.to/rogertorres/first-steps-with-docker-rust-30oi
