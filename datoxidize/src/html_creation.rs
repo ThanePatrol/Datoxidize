@@ -18,12 +18,14 @@ fn get_top_level_directories() -> Vec<String> {
             .unwrap().to_string())
         .collect()
 }
-
+/*
 pub fn test_print_html() {
     let paths = get_top_level_directories();
     let dir_template = DirEntryHtmlTemplate { paths };
     println!("{}", dir_template.render().unwrap())
 }
+
+ */
 
 pub async fn test_render() -> impl IntoResponse {
     let paths = get_top_level_directories();

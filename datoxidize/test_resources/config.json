@@ -1,1 +1,1 @@
-{"content_directory":"./example_dir","remote_relative_directory":"./copy_dir/dir1/","directory_id":1,"sync_frequency":{"secs":1,"nanos":0}}
+{"content_directory":"./example_dir","remote_relative_directory":"./copy_dir/dir1/","directory_id":1,"sync_frequency":{"secs":1,"nanos":0},"ignored_files":["don't_sync_me.csv"]}

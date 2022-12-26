@@ -1,9 +1,9 @@
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::fs::Metadata;
-use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
-use std::path::PathBuf;
-use std::time::Duration;
+use std::path::{PathBuf};
+use std::time::{Duration, SystemTime};
+use fs_extra::file::CopyOptions;
 use notify::*;
 use serde::{Deserialize, Serialize};
 
@@ -17,8 +17,9 @@ use serde::{Deserialize, Serialize};
 pub struct DirectoryConfig {
     pub content_directory: String,
     pub remote_relative_directory: String,
-    directory_id: i32,
-    sync_frequency: Duration,
+    pub directory_id: i32,
+    pub sync_frequency: Duration,
+    pub ignored_files: HashSet<PathBuf>,
 }
 
 impl DirectoryConfig {
@@ -32,6 +33,7 @@ impl DirectoryConfig {
             remote_relative_directory,
             directory_id,
             sync_frequency,
+            ignored_files: HashSet::new(),
         }
     }
 }
@@ -39,22 +41,76 @@ impl DirectoryConfig {
 /// Public API that reads through directories and syncs files and directories
 /// Should only be done on startup
 pub fn initial_sync(directory: &DirectoryConfig) {
-    /// Read through files in local root directory, get the hash of the
-    fn get_hash_codes_of_local_with_files(local_path: &String) -> (Vec<Metadata>, Vec<String>) {
-        let mut metadata = Vec::new();
-        let mut files = Vec::new();
-        let dir_content = fs_extra::dir::get_dir_content(local_path).unwrap();
-        for file in dir_content.files {
-            files.push(file.clone());
-            let file_metadata = std::fs::metadata(file).unwrap();
-            metadata.push(file_metadata);
-        }
-        (metadata, files)
-    }
-    let data = get_hash_codes_of_local_with_files(&directory.content_directory);
+    fn get_list_of_files_to_update_on_remote (
+        local_metadata: &Vec<(PathBuf, Metadata)>,
+        remote_metadata: &Vec<(PathBuf, Metadata)>
+    ) -> Vec<PathBuf> {
+        let mut to_sync = Vec::new();
+        let local = get_files_with_modified_time(local_metadata);
+        let remote = get_files_with_modified_time(remote_metadata);
+        for file in local.iter() {
+            if remote.contains_key(file.0) {
+                let remote_time = *remote.get(file.0).unwrap();
+                let time_diff;
+                let _ = match remote_time.elapsed() {
+                    Ok(res) => time_diff = res,
+                    Err(_) => time_diff = file.1.elapsed().unwrap(),
+                };
+                if time_diff > Duration::from_secs(5) {
+                    to_sync.push(file.0.to_owned());
+                }
 
-    //todo - copy over all data from example_dir to copy_dir on system load
-    println!("{:?}", data);
+            } else {
+                to_sync.push(file.0.to_owned())
+            }
+        }
+        to_sync
+    }
+
+    fn get_files_with_modified_time(files: &Vec<(PathBuf, Metadata)>) -> HashMap<PathBuf, SystemTime> {
+        let mut paths_and_modifications = HashMap::new();
+        for file in files {
+            paths_and_modifications.insert(file.0.clone(), file.1.modified().unwrap());
+        }
+        paths_and_modifications
+    }
+
+    /// Takes a Vec<PathBuf> of the updated and new local files then copies them to remote
+    fn copy_local_changes_from_local_to_remote(files: Vec<PathBuf>, directory: &DirectoryConfig ) {
+        let file_copy_options = fs_extra::file::CopyOptions {
+            overwrite: true,
+            skip_exist: false,
+            ..Default::default()
+        };
+
+        for file in files {
+            let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &directory);
+            println!("save path: {}, source: {:?}", save_path, file);
+            fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
+        }
+    }
+
+    let local_data = get_files_and_metadata(directory);
+    let remote_data = get_files_and_metadata(directory);
+    let files_to_sync = get_list_of_files_to_update_on_remote(&local_data, &remote_data);
+    copy_local_changes_from_local_to_remote(files_to_sync, directory);
+
+
+}
+
+/// Read through files in local root directory, get the metadata of each file unless file is specifically ignored
+fn get_files_and_metadata(directory_config: &DirectoryConfig) -> Vec<(PathBuf, Metadata)> {
+    let mut metadata = Vec::new();
+    let dir_content = fs_extra::dir::get_dir_content(&directory_config.content_directory).unwrap();
+    for file in dir_content.files {
+        let path = PathBuf::from(&file);
+        if directory_config.ignored_files.contains(&*PathBuf::from(path.file_name().unwrap())) {
+            continue
+        }
+        let data = (path, std::fs::metadata(file).unwrap());
+        metadata.push(data);
+    }
+    metadata
 }
 
 /// Main public api for syncing a changed file to a remote dir
@@ -93,9 +149,15 @@ pub fn remove_files_and_dirs_from_remote(events: &Vec<PathBuf>, directory: &Dire
 
         let path = PathBuf::from(file_to_remove);
         if path.is_file() {
-            std::fs::remove_file(path).expect("Error removing file");
+            let _ = match std::fs::remove_file(&path) {
+                Ok(_r) => println!("Removed file {:?} successfully", &path),
+                Err(_e) => println!("Error removing file {:?}, not found on remote", &path),
+            };
         } else {
-            std::fs::remove_dir(path).expect("Error removing dir");
+            let _ = match std::fs::remove_dir(&path) {
+                Ok(_r) => println!("Removed directory {:?} successfully", &path),
+                Err(_e) => println!("Error removing directory {:?}, not found on remote", &path),
+            };
         }
     }
 }
@@ -165,6 +227,7 @@ pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
 mod tests {
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
+    use std::thread;
     use rand::distributions::{Alphanumeric, Standard};
     use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
@@ -227,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_synced_file() {
+    fn test_remove_synced_file() {
         let local_event_paths = vec![
             PathBuf::from_str("./example_dir/Multimedia.tsv").unwrap(),
             PathBuf::from_str("./example_dir/test/test_sync_remove.csv").unwrap()
@@ -247,7 +310,7 @@ mod tests {
 
     /// Checks if a single directory is deleted
     #[test]
-    fn remove_synced_directory() {
+    fn test_remove_synced_directory() {
         let mut root_local = "./example_dir/test".to_string();
 
         for i in 0..5 {
@@ -282,5 +345,60 @@ mod tests {
         );
         assert!(!remote_path.exists());
 
+    }
+
+    #[test]
+    fn test_get_files_with_durations() {
+        let root_str = "./example_dir/test";
+        let memes_str = "./example_dir/test/memes.txt";
+        let memes2_str = "./example_dir/test/memes2.txt";
+
+        let root = Path::new(root_str);
+        std::fs::create_dir_all(root).unwrap();
+        std::fs::File::create(memes_str).unwrap();
+
+        thread::sleep(Duration::from_secs(2));
+        std::fs::File::create(memes2_str).unwrap();
+
+        let dir_config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+
+        //This is the main thing being test, is the metadata collection accurate
+        let metadata = get_files_and_metadata(&dir_config);
+
+        println!("{:?}", metadata);
+        let meme_path = PathBuf::from(memes_str);
+        let meme2_path = PathBuf::from(memes2_str);
+
+        let mut data_of_interest = Vec::new();
+        for data in metadata {
+            if data.0 == meme_path {
+                data_of_interest.push(data)
+            } else if data.0 == meme2_path {
+                data_of_interest.push(data)
+            }
+        }
+
+
+        let memes1_time = data_of_interest[0].1.created().unwrap();
+        let memes2_time = data_of_interest[1].1.created().unwrap();
+        let difference = memes2_time.duration_since(memes1_time).unwrap();
+
+        assert!(difference.gt(&Duration::from_secs(1)));
+
+        std::fs::remove_file(memes_str).unwrap();
+        std::fs::remove_file(memes2_str).unwrap();
+    }
+
+    /// Test if ignored files in config are being respected
+    #[test]
+    fn test_are_ignored_files_being_ignored() {
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let metadata = get_files_and_metadata(&config);
+
+        let should_not_be_synced = config.ignored_files;
+
+        for file in metadata {
+            assert!(!should_not_be_synced.contains(&file.0))
+        }
     }
 }

@@ -17,7 +17,6 @@ use std::net::SocketAddr;
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
 use serde_json::{json, Value};
-use crate::html_creation::HtmlTemplate;
 
 #[tokio::main]
 async fn main() -> Result<()> {
