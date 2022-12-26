@@ -41,10 +41,7 @@ impl DirectoryConfig {
 /// Public API that reads through directories and syncs files and directories
 /// Should only be done on startup
 pub fn initial_sync(directory: &DirectoryConfig) {
-    fn get_list_of_files_to_update_on_remote (
-        local_metadata: &Vec<(PathBuf, Metadata)>,
-        remote_metadata: &Vec<(PathBuf, Metadata)>
-    ) -> Vec<PathBuf> {
+    fn get_list_of_files_to_update_on_remote (local_metadata: &Vec<(PathBuf, Metadata)>, remote_metadata: &Vec<(PathBuf, Metadata)>) -> Vec<PathBuf> {
         let mut to_sync = Vec::new();
         let local = get_files_with_modified_time(local_metadata);
         let remote = get_files_with_modified_time(remote_metadata);
@@ -59,8 +56,10 @@ pub fn initial_sync(directory: &DirectoryConfig) {
                 if time_diff > Duration::from_secs(5) {
                     to_sync.push(file.0.to_owned());
                 }
+                //println!(remote.)
 
             } else {
+                println!(" file not present on remote: {:?}", file.0);
                 to_sync.push(file.0.to_owned())
             }
         }
@@ -90,18 +89,26 @@ pub fn initial_sync(directory: &DirectoryConfig) {
         }
     }
 
-    let local_data = get_files_and_metadata(directory);
-    let remote_data = get_files_and_metadata(directory);
+    let local_data = get_files_and_metadata(directory, true);
+    let remote_data = get_files_and_metadata(directory, false);
     let files_to_sync = get_list_of_files_to_update_on_remote(&local_data, &remote_data);
+
+    println!("files to sync: {:?}", files_to_sync);
     copy_local_changes_from_local_to_remote(files_to_sync, directory);
 
 
 }
 
 /// Read through files in local root directory, get the metadata of each file unless file is specifically ignored
-fn get_files_and_metadata(directory_config: &DirectoryConfig) -> Vec<(PathBuf, Metadata)> {
+fn get_files_and_metadata(directory_config: &DirectoryConfig, local_flag: bool) -> Vec<(PathBuf, Metadata)> {
     let mut metadata = Vec::new();
-    let dir_content = fs_extra::dir::get_dir_content(&directory_config.content_directory).unwrap();
+    let dir_content;
+    if local_flag {
+        dir_content = fs_extra::dir::get_dir_content(&directory_config.content_directory).unwrap();
+    } else {
+        dir_content = fs_extra::dir::get_dir_content(&directory_config.remote_relative_directory).unwrap()
+    }
+
     for file in dir_content.files {
         let path = PathBuf::from(&file);
         if directory_config.ignored_files.contains(&*PathBuf::from(path.file_name().unwrap())) {
@@ -363,7 +370,7 @@ mod tests {
         let dir_config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
         //This is the main thing being test, is the metadata collection accurate
-        let metadata = get_files_and_metadata(&dir_config);
+        let metadata = get_files_and_metadata(&dir_config, true);
 
         println!("{:?}", metadata);
         let meme_path = PathBuf::from(memes_str);
@@ -393,7 +400,7 @@ mod tests {
     #[test]
     fn test_are_ignored_files_being_ignored() {
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
-        let metadata = get_files_and_metadata(&config);
+        let metadata = get_files_and_metadata(&config, true);
 
         let should_not_be_synced = config.ignored_files;
 
@@ -401,4 +408,33 @@ mod tests {
             assert!(!should_not_be_synced.contains(&file.0))
         }
     }
+
+    #[test]
+    fn test_copy_files_from_local_to_remote_if_not_present() {
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+
+        let file_origin = vec!["./test_resources/random_test_files/p1.csv", "./test_resources/random_test_files/p2.csv"];
+        let copy_options = fs_extra::dir::CopyOptions {
+            overwrite: true,
+            skip_exist: false,
+            ..Default::default()
+        };
+        fs_extra::copy_items(&file_origin, "./example_dir", &copy_options).unwrap();
+
+        initial_sync(&config);
+
+        let files_remote = vec!["./copy_dir/dir1/example_dir/p1.csv", "./copy_dir/dir1/example_dir/p2.csv"];
+
+        for file in files_remote {
+            let path = Path::new(file);
+            println!("{:?}", path);
+            assert!(path.exists());
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_file("./example_dir/p1.csv").unwrap();
+        std::fs::remove_file("./example_dir/p2.csv").unwrap();
+
+    }
+
+    //todo - create tests with nested folders on local that are not present on remote. Are those folders created where appropriate
 }
