@@ -5,6 +5,7 @@ use std::path::{PathBuf};
 use std::time::{Duration, SystemTime};
 use notify::*;
 use serde::{Deserialize, Serialize};
+use tracing::field::display;
 
 /// root_directory specifies the directory for the syncing to occur, this should
 /// mirror the local dir exactly
@@ -40,13 +41,55 @@ impl DirectoryConfig {
 /// Public API that reads through directories and syncs files and directories
 pub fn initial_sync(directory: &DirectoryConfig) {
 
-    init_sync_local_to_remote(directory)
-
+    init_sync_local_to_remote(directory);
+    init_sync_remote_to_local(directory);
 
 }
 
+//todo - create a method called get_full_local_path that takes a remote file and a config and gets an appropriate local file path - needed for bidirectional syncing
 fn init_sync_remote_to_local(config: &DirectoryConfig) {
+    fn get_list_of_files_to_update_on_local(local_metadata: &Vec<(PathBuf, Metadata)>, remote_meta_data: &Vec<(PathBuf, Metadata)>) -> Vec<PathBuf> {
+        let mut to_sync = Vec::new();
+        let local = convert_paths_to_hashmap(local_metadata);
+        let remote = convert_paths_to_hashmap(remote_meta_data);
 
+        for remote_file in remote.iter() {
+            if local.contains_key(remote_file.0) {
+                let local_time = local.get(remote_file.0).unwrap().1;
+                let time_diff;
+                match remote_file.1.1.duration_since(local_time) {
+                    Ok(res) => time_diff = res,
+                    Err(_) => continue,
+                }
+
+                if time_diff > Duration::from_secs(5) {
+                    to_sync.push(remote_file.1.0.to_owned());
+                }
+            } else {
+                to_sync.push(remote_file.1.0.to_owned());
+            }
+        }
+        to_sync
+    }
+    fn copy_remote_changes_to_local(files_to_copy: Vec<PathBuf>, config: &DirectoryConfig) {
+        let file_copy_options = fs_extra::file::CopyOptions {
+            overwrite: true,
+            skip_exist: false,
+            ..Default::default()
+        };
+
+        for file in files_to_copy {
+            let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &config);
+            println!("save path: {}, source: {:?}", save_path, file);
+            fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
+        }
+    }
+
+    let local_data = get_files_and_metadata(config, true);
+    let remote_data = get_files_and_metadata(config, false);
+    let files_to_sync = get_list_of_files_to_update_on_local(&local_data, &remote_data);
+    println!("files to sync: {:?}", files_to_sync);
+    copy_remote_changes_to_local(files_to_sync, config);
 }
 
 fn init_sync_local_to_remote(config: &DirectoryConfig) {
@@ -85,8 +128,6 @@ fn init_sync_local_to_remote(config: &DirectoryConfig) {
 
         for file in files {
             let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &directory);
-            println!("save path: {}, source: {:?}", save_path, file);
-
             fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
         }
     }
@@ -94,8 +135,6 @@ fn init_sync_local_to_remote(config: &DirectoryConfig) {
     let local_data = get_files_and_metadata(config, true);
     let remote_data = get_files_and_metadata(config, false);
     let files_to_sync = get_list_of_files_to_update_on_remote(&local_data, &remote_data);
-
-    println!("files to sync: {:?}", files_to_sync);
     copy_local_changes_from_local_to_remote(files_to_sync, config);
 }
 
@@ -442,6 +481,11 @@ mod tests {
         }
         std::fs::remove_file("./example_dir/p1.csv").unwrap();
         std::fs::remove_file("./example_dir/p2.csv").unwrap();
+    }
+
+    #[test]
+    fn test_newer_files_on_remote_are_not_overwritten() {
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
     }
 

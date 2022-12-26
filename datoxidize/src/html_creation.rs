@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 #[derive(Template, Debug)]
-#[template(path = "directory.html", print = "all")]
+#[template(path = "directory.html")]
 
 struct DirEntryHtmlTemplate {
     paths: Vec<String>,
