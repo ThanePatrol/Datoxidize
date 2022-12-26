@@ -43,33 +43,35 @@ impl DirectoryConfig {
 pub fn initial_sync(directory: &DirectoryConfig) {
     fn get_list_of_files_to_update_on_remote (local_metadata: &Vec<(PathBuf, Metadata)>, remote_metadata: &Vec<(PathBuf, Metadata)>) -> Vec<PathBuf> {
         let mut to_sync = Vec::new();
-        let local = get_files_with_modified_time(local_metadata);
-        let remote = get_files_with_modified_time(remote_metadata);
+        let local = convert_paths_to_hashmap(local_metadata);
+        let remote = convert_paths_to_hashmap(remote_metadata);
         for file in local.iter() {
             if remote.contains_key(file.0) {
-                let remote_time = *remote.get(file.0).unwrap();
+                // file is present on the remote is the modification time greater than 5 seconds? is what this code is checking
+                let remote_time = remote.get(file.0).unwrap();
                 let time_diff;
-                let _ = match remote_time.elapsed() {
+                let _ = match remote_time.1.elapsed() {
                     Ok(res) => time_diff = res,
-                    Err(_) => time_diff = file.1.elapsed().unwrap(),
+                    Err(_) => time_diff = file.1.1.elapsed().unwrap(),
                 };
+
+                //todo - figure out why the duration is greater than 5 seconds even though the files have been synced more recently
                 if time_diff > Duration::from_secs(5) {
-                    to_sync.push(file.0.to_owned());
+                    to_sync.push(file.1.0.to_owned());
                 }
-                //println!(remote.)
 
             } else {
-                println!(" file not present on remote: {:?}", file.0);
-                to_sync.push(file.0.to_owned())
+                to_sync.push(file.1.0.to_owned())
             }
         }
         to_sync
     }
 
-    fn get_files_with_modified_time(files: &Vec<(PathBuf, Metadata)>) -> HashMap<PathBuf, SystemTime> {
+    /// Returns a hashmap with filenames as the key and the value as a tuple containing the full path and the time of last modification
+    fn convert_paths_to_hashmap(files: &Vec<(PathBuf, Metadata)>) -> HashMap<PathBuf, (PathBuf, SystemTime)> {
         let mut paths_and_modifications = HashMap::new();
         for file in files {
-            paths_and_modifications.insert(file.0.clone(), file.1.modified().unwrap());
+            paths_and_modifications.insert(PathBuf::from(file.0.clone().file_name().unwrap()), (file.0.clone(), file.1.modified().unwrap()));
         }
         paths_and_modifications
     }
@@ -85,6 +87,7 @@ pub fn initial_sync(directory: &DirectoryConfig) {
         for file in files {
             let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &directory);
             println!("save path: {}, source: {:?}", save_path, file);
+
             fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
         }
     }
