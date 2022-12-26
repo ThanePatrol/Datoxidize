@@ -3,7 +3,6 @@ use std::fs::Metadata;
 use std::io::{Read, Write};
 use std::path::{PathBuf};
 use std::time::{Duration, SystemTime};
-use fs_extra::file::CopyOptions;
 use notify::*;
 use serde::{Deserialize, Serialize};
 
@@ -39,8 +38,18 @@ impl DirectoryConfig {
 }
 
 /// Public API that reads through directories and syncs files and directories
-/// Should only be done on startup
 pub fn initial_sync(directory: &DirectoryConfig) {
+
+    init_sync_local_to_remote(directory)
+
+
+}
+
+fn init_sync_remote_to_local(config: &DirectoryConfig) {
+
+}
+
+fn init_sync_local_to_remote(config: &DirectoryConfig) {
     fn get_list_of_files_to_update_on_remote (local_metadata: &Vec<(PathBuf, Metadata)>, remote_metadata: &Vec<(PathBuf, Metadata)>) -> Vec<PathBuf> {
         let mut to_sync = Vec::new();
         let local = convert_paths_to_hashmap(local_metadata);
@@ -50,12 +59,11 @@ pub fn initial_sync(directory: &DirectoryConfig) {
                 // file is present on the remote is the modification time greater than 5 seconds? is what this code is checking
                 let remote_time = remote.get(file.0).unwrap();
                 let time_diff;
-                let _ = match remote_time.1.elapsed() {
+                let _ = match file.1.1.duration_since(remote_time.1) {
                     Ok(res) => time_diff = res,
-                    Err(_) => time_diff = file.1.1.elapsed().unwrap(),
+                    Err(_) => continue,
                 };
 
-                //todo - figure out why the duration is greater than 5 seconds even though the files have been synced more recently
                 if time_diff > Duration::from_secs(5) {
                     to_sync.push(file.1.0.to_owned());
                 }
@@ -65,15 +73,6 @@ pub fn initial_sync(directory: &DirectoryConfig) {
             }
         }
         to_sync
-    }
-
-    /// Returns a hashmap with filenames as the key and the value as a tuple containing the full path and the time of last modification
-    fn convert_paths_to_hashmap(files: &Vec<(PathBuf, Metadata)>) -> HashMap<PathBuf, (PathBuf, SystemTime)> {
-        let mut paths_and_modifications = HashMap::new();
-        for file in files {
-            paths_and_modifications.insert(PathBuf::from(file.0.clone().file_name().unwrap()), (file.0.clone(), file.1.modified().unwrap()));
-        }
-        paths_and_modifications
     }
 
     /// Takes a Vec<PathBuf> of the updated and new local files then copies them to remote
@@ -92,14 +91,21 @@ pub fn initial_sync(directory: &DirectoryConfig) {
         }
     }
 
-    let local_data = get_files_and_metadata(directory, true);
-    let remote_data = get_files_and_metadata(directory, false);
+    let local_data = get_files_and_metadata(config, true);
+    let remote_data = get_files_and_metadata(config, false);
     let files_to_sync = get_list_of_files_to_update_on_remote(&local_data, &remote_data);
 
     println!("files to sync: {:?}", files_to_sync);
-    copy_local_changes_from_local_to_remote(files_to_sync, directory);
+    copy_local_changes_from_local_to_remote(files_to_sync, config);
+}
 
-
+/// Returns a hashmap with filenames as the key and the value as a tuple containing the full path and the time of last modification
+fn convert_paths_to_hashmap(files: &Vec<(PathBuf, Metadata)>) -> HashMap<PathBuf, (PathBuf, SystemTime)> {
+    let mut paths_and_modifications = HashMap::new();
+    for file in files {
+        paths_and_modifications.insert(PathBuf::from(file.0.clone().file_name().unwrap()), (file.0.clone(), file.1.modified().unwrap()));
+    }
+    paths_and_modifications
 }
 
 /// Read through files in local root directory, get the metadata of each file unless file is specifically ignored

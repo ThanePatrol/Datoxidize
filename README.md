@@ -15,21 +15,4 @@ These features are yet to be added. If you can see yourself adding one, create a
 - iOS app and Android app to act as a front-end for accessing files and syncing
 - Optionally turn on a webDav option to allow legacy app access
 
-
-# todo
-#### 1. implement web server view
-- serve basic static html pages with a list of the top level directory
-
-#### 2. package app into standalone docker container
-- needs to be used and tested as a standalone container
-- create container, ensure it works to sync files from local to container
-
-#### 3. create gui clients
-- Start out with desktop clients
-- iOs/android to follow
-
-#### 4. initial sync
-- Do a scan of the directories that are watched, get the initial sync happening
-
-#### 5. Blacklist files
-- add methods to prevent certain files from being synced
+e
