@@ -5,7 +5,6 @@ use std::path::{PathBuf};
 use std::time::{Duration, SystemTime};
 use notify::*;
 use serde::{Deserialize, Serialize};
-use tracing::field::display;
 
 /// root_directory specifies the directory for the syncing to occur, this should
 /// mirror the local dir exactly
@@ -79,7 +78,7 @@ fn init_sync_remote_to_local(config: &DirectoryConfig) {
         };
 
         for file in files_to_copy {
-            let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &config);
+            let save_path = get_full_local_path(&file.to_str().unwrap().to_string(), &config);
             println!("save path: {}, source: {:?}", save_path, file);
             fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
         }
@@ -128,7 +127,7 @@ fn init_sync_local_to_remote(config: &DirectoryConfig) {
 
         for file in files {
             let save_path = get_full_remote_path(&file.to_str().unwrap().to_string(), &directory);
-            fs_extra::file::copy(file, save_path, &file_copy_options).unwrap();
+            fs_extra::file::copy(&file, &save_path, &file_copy_options).expect(&*format!("Error try to save {:?} to {}", file, save_path));
         }
     }
 
@@ -162,7 +161,7 @@ fn get_files_and_metadata(directory_config: &DirectoryConfig, local_flag: bool) 
         if directory_config.ignored_files.contains(&*PathBuf::from(path.file_name().unwrap())) {
             continue
         }
-        let data = (path, std::fs::metadata(file).unwrap());
+        let data = (path, std::fs::metadata(&file).expect(&*format!("Trying to read, {}", &file)));
         metadata.push(data);
     }
     metadata
@@ -172,6 +171,7 @@ fn get_files_and_metadata(directory_config: &DirectoryConfig, local_flag: bool) 
 /// Takes an event and the directorySettings that the event corresponds to an syncs it with the remote
 pub fn sync_changed_file(event: &Vec<PathBuf>, directory: &DirectoryConfig) {
     for single_change in event {
+        println!("single change: {:?}", single_change);
         let data_to_sync = std::fs::read(single_change.as_path())
             .expect("Error reading data to sync");
 
@@ -217,15 +217,46 @@ pub fn remove_files_and_dirs_from_remote(events: &Vec<PathBuf>, directory: &Dire
     }
 }
 
+/// Main API for getting the local path to sync something to from a remote path
+fn get_full_local_path(event_path: &String, directory: &DirectoryConfig) -> String {
+    fn build_local_remote_path(directory: &DirectoryConfig) -> String {
+        directory.content_directory.clone()
+    }
+    fn build_local_directory_structure(remote_file_path: &String, directory: &DirectoryConfig) -> String {
+        let remote_path = remote_file_path.clone();
+        let pattern = remove_path_approximate_from_config(&mut directory.content_directory.clone());
+        let split_path = remote_path.rsplit_once(pattern.as_str()).unwrap();
+        split_path.1.to_string()
+    }
+
+    let mut path = String::new();
+    let root = build_local_remote_path(directory);
+    path.push_str(root.as_str());
+    let dir_structure = build_local_directory_structure(event_path, directory);
+    path.push_str(dir_structure.as_str());
+    path
+}
 
 /// Main API for building the remote path for any file or directory syncing
 /// Builds full directory as a string for a specific file or directory
 /// Takes the event_path of the local event and a directory config
 fn get_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> String {
+    /// Will build the remote_storage path, eg: ./dir1/content_dir/
+    /// this still needs the directory structure from the local appended
+    fn build_root_remote_path(directory: &DirectoryConfig) -> String {
+        let mut remote_path = dotenvy::var("ROOT_STORAGE").unwrap();
+        remote_path.push_str("dir");
+        remote_path.push_str(&directory.directory_id.to_string());
+        remote_path.push('/');
+        let parent_dir = remove_path_approximate_from_config(&mut directory.content_directory.clone());
+        remote_path.push_str(&parent_dir);
+        remote_path
+    }
+
     let mut path = String::new();
     let root = build_root_remote_path(directory);
     path.push_str(root.as_str());
-    let dir_structure = build_directory_structure(&event_path, &directory.content_directory);
+    let dir_structure = build_remote_directory_structure(&event_path, &directory.content_directory);
     path.push_str(dir_structure.as_str());
     path
 }
@@ -234,25 +265,13 @@ fn get_full_remote_path(event_path: &String, directory: &DirectoryConfig) -> Str
 /// until the directory_root name is found
 /// NB as rsplit_once finds the last occurrence of the given &str and splits it there, one cannot
 /// have the same folder name
-fn build_directory_structure(event_path: &String, content_directory_root: &String) -> String {
+fn build_remote_directory_structure(event_path: &String, content_directory_root: &String) -> String {
     let mut new_path = String::new();
     let full_event = event_path.clone();
     let pattern = remove_path_approximate_from_config(&mut content_directory_root.clone());
     let split_path = full_event.rsplit_once(pattern.as_str()).unwrap();
     new_path.push_str(split_path.1);
     new_path
-}
-
-/// Will build the remote_storage path, eg: ./dir1/content_dir/
-/// this still needs the directory structure from the local appended
-fn build_root_remote_path(directory: &DirectoryConfig) -> String {
-    let mut remote_path = dotenvy::var("ROOT_STORAGE").unwrap();
-    remote_path.push_str("dir");
-    remote_path.push_str(&directory.directory_id.to_string());
-    remote_path.push('/');
-    let parent_dir = remove_path_approximate_from_config(&mut directory.content_directory.clone());
-    remote_path.push_str(&parent_dir);
-    remote_path
 }
 
 /// config stores a path in a `./dir` manner, the slash and dot need to be removed
@@ -287,6 +306,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand::rngs::StdRng;
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_build_directory_structure() {
@@ -327,40 +347,61 @@ mod tests {
 
     #[test]
     fn test_sync_changed_file() {
+        // copy files from test dir into watched dir
+        let paths = vec![
+            "p1.csv",
+            "tester/test_sync_remove.csv",
+        ];
+        copy_test_items_into_watched_dir(&paths);
+
         let event_paths = vec![
-            PathBuf::from_str("./example_dir/Taxon.tsv").unwrap(),
-            PathBuf::from_str("./example_dir/test/test_sync.csv").unwrap()
+            PathBuf::from_str("./example_dir/p1.csv").unwrap(),
+            PathBuf::from_str("./example_dir/tester/test_sync_remove.csv").unwrap()
         ];
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
         sync_changed_file(&event_paths, &config);
 
-        let taxon = Path::new("./copy_dir/dir1/example_dir/Taxon.tsv");
-        let nested = Path::new("./copy_dir/dir1/example_dir/test/test_sync.csv");
-        assert!(taxon.exists());
+        let p1 = Path::new("./copy_dir/dir1/example_dir/p1.csv");
+        let nested = Path::new("./copy_dir/dir1/example_dir/tester/test_sync_remove.csv");
+        assert!(p1.exists());
         assert!(nested.exists());
 
-        std::fs::remove_file(taxon).unwrap();
+        std::fs::remove_file(p1).unwrap();
         std::fs::remove_file(nested).unwrap();
+        delete_test_items_from_watched_dir(&paths)
     }
 
     #[test]
+    #[serial]
     fn test_remove_synced_file() {
+        let paths = vec![
+            "p3.csv",
+            "p4.csv",
+            "test/test_sync.csv",
+        ];
+        copy_test_items_into_watched_dir(&paths);
+
+
         let local_event_paths = vec![
-            PathBuf::from_str("./example_dir/Multimedia.tsv").unwrap(),
-            PathBuf::from_str("./example_dir/test/test_sync_remove.csv").unwrap()
+            PathBuf::from_str("./example_dir/p3.csv").unwrap(),
+            PathBuf::from_str("./example_dir/p4.csv").unwrap(),
+            PathBuf::from_str("./example_dir/test/test_sync.csv").unwrap()
         ];
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
         sync_changed_file(&local_event_paths, &config);
 
-        let taxon = Path::new("./copy_dir/dir1/example_dir/Multimedia.tsv");
-        let nested = Path::new("./copy_dir/dir1/example_dir/test/test_sync_remove.csv");
-        assert!(taxon.exists());
+        let p3 = Path::new("./copy_dir/dir1/example_dir/p3.csv");
+        let nested = Path::new("./copy_dir/dir1/example_dir/test/test_sync.csv");
+        assert!(p3.exists());
         assert!(nested.exists());
+
         remove_files_and_dirs_from_remote(&local_event_paths, &config);
 
-        assert!(!taxon.exists());
+        assert!(!p3.exists());
         assert!(!nested.exists());
+
+        delete_test_items_from_watched_dir(&paths);
     }
 
     /// Checks if a single directory is deleted
@@ -404,16 +445,17 @@ mod tests {
 
     #[test]
     fn test_get_files_with_durations() {
-        let root_str = "./example_dir/test";
-        let memes_str = "./example_dir/test/memes.txt";
-        let memes2_str = "./example_dir/test/memes2.txt";
+        fs_extra::dir::create_all("./example_dir/tea/", false).unwrap();
+        fs_extra::dir::create_all("./copy_dir/dir1/example_dir/tea", false).unwrap();
+        let root_str = "./example_dir/tea/";
+        let memes_str = "./example_dir/tea/memes.txt";
+        let memes2_str = "./example_dir/tea/memes2.txt";
 
         let root = Path::new(root_str);
-        std::fs::create_dir_all(root).unwrap();
         std::fs::File::create(memes_str).unwrap();
 
         thread::sleep(Duration::from_secs(2));
-        std::fs::File::create(memes2_str).unwrap();
+        std::fs::File::create(memes2_str).expect(&*format!("Error creating {}", memes2_str));
 
         let dir_config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
@@ -442,6 +484,8 @@ mod tests {
 
         std::fs::remove_file(memes_str).unwrap();
         std::fs::remove_file(memes2_str).unwrap();
+        fs_extra::dir::remove("./example_dir/tea").unwrap();
+        fs_extra::dir::remove("./copy_dir/dir1/example_dir/tea").unwrap();
     }
 
     /// Test if ignored files in config are being respected
@@ -458,20 +502,17 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_copy_files_from_local_to_remote_if_not_present() {
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let file_origin = vec!["./example_dir/op3.csv", "./example_dir/op4.csv"];
+        for f in file_origin.iter() {
+            std::fs::File::create(f).unwrap();
+        }
 
-        let file_origin = vec!["./test_resources/random_test_files/p1.csv", "./test_resources/random_test_files/p2.csv"];
-        let copy_options = fs_extra::dir::CopyOptions {
-            overwrite: true,
-            skip_exist: false,
-            ..Default::default()
-        };
-        fs_extra::copy_items(&file_origin, "./example_dir", &copy_options).unwrap();
+        init_sync_local_to_remote(&config);
 
-        initial_sync(&config);
-
-        let files_remote = vec!["./copy_dir/dir1/example_dir/p1.csv", "./copy_dir/dir1/example_dir/p2.csv"];
+        let files_remote = vec!["./copy_dir/dir1/example_dir/op3.csv", "./copy_dir/dir1/example_dir/op4.csv"];
 
         for file in files_remote {
             let path = Path::new(file);
@@ -479,15 +520,81 @@ mod tests {
             assert!(path.exists());
             std::fs::remove_file(path).unwrap();
         }
-        std::fs::remove_file("./example_dir/p1.csv").unwrap();
-        std::fs::remove_file("./example_dir/p2.csv").unwrap();
+
+        for file in file_origin {
+            std::fs::remove_file(file).unwrap();
+        }
     }
 
+    #[test]
+    #[serial]
+    fn test_copy_files_from_remote_to_local_if_not_present() {
+        thread::sleep(Duration::from_secs(1));
+        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
+        let file_origin = vec!["./copy_dir/dir1/example_dir/op1.csv", "./copy_dir/dir1/example_dir/op2.csv"];
+        for f in file_origin.iter() {
+            std::fs::File::create(f).unwrap();
+        }
+
+        init_sync_remote_to_local(&config);
+        let files_local = vec!["./example_dir/op1.csv", "./example_dir/op2.csv"];
+        for file in files_local {
+            let path = Path::new(file);
+            assert!(path.exists());
+            std::fs::remove_file(path).unwrap();
+        }
+
+        for file in file_origin {
+            std::fs::remove_file(file).unwrap();
+        }
+    }
+
+    fn copy_test_items_into_watched_dir(paths: &Vec<&str>) {
+        let copy_options = fs_extra::file::CopyOptions {
+            overwrite: true,
+            skip_exist: false,
+            ..Default::default()
+        };
+        fs_extra::dir::create_all("./example_dir/test", false).unwrap();
+        fs_extra::dir::create_all("./copy_dir/dir1/example_dir/test", false).unwrap();
+        fs_extra::dir::create_all("./example_dir/tester", false).unwrap();
+        fs_extra::dir::create_all("./copy_dir/dir1/example_dir/tester", false).unwrap();
+        fs_extra::dir::create_all("./example_dir/t", false).unwrap();
+        fs_extra::dir::create_all("./copy_dir/dir1/example_dir/t", false).unwrap();
+
+        for p in paths {
+            let mut path = String::from("./test_resources/random_test_files/");
+            path.push_str(p);
+            println!("path: {}", path);
+            let mut save_path = String::from("./example_dir/");
+            save_path.push_str(p);
+            println!("save path: {}", save_path);
+            fs_extra::file::copy(path, save_path, &copy_options).unwrap();
+        }
+    }
+
+    fn delete_test_items_from_watched_dir(paths: &Vec<&str>) {
+        for file in paths {
+            let mut path = String::from("./example_dir/");
+            path.push_str(file);
+            std::fs::remove_file(path).unwrap();
+        }
+        fs_extra::dir::remove("./example_dir/test").unwrap();
+        fs_extra::dir::remove("./copy_dir/dir1/example_dir/test").unwrap();
+        fs_extra::dir::remove("./example_dir/tester").unwrap();
+        fs_extra::dir::remove("./copy_dir/dir1/example_dir/tester").unwrap();
+        fs_extra::dir::remove("./example_dir/t").unwrap();
+        fs_extra::dir::remove("./copy_dir/dir1/example_dir/t").unwrap();
+
+    }
+    /*
     #[test]
     fn test_newer_files_on_remote_are_not_overwritten() {
         let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
 
     }
+
+     */
 
     //todo - create tests with nested folders on local that are not present on remote. Are those folders created where appropriate
 }
