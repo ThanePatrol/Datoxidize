@@ -1,5 +1,5 @@
 debug/
-target/
+datoxidize/target/
 
 Cargo.lock
 
@@ -10,5 +10,9 @@ Cargo.lock
 *.pdb
 
 # working files for testing purposes
-/copy_dir
-/example_dir
+datoxidize/copy_dir
+datoxidize/example_dir
+
+server/storage
+server/target
+/server/target/

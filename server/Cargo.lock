@@ -204,26 +204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "datoxidize"
-version = "0.1.0"
-dependencies = [
- "askama",
- "axum",
- "dotenvy",
- "fs_extra",
- "notify",
- "rand",
- "rayon",
- "rustls",
- "serde",
- "serde_json",
- "serial_test",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "dotenvy"
 version = "0.15.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -944,6 +924,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "askama",
+ "axum",
+ "dotenvy",
+ "fs_extra",
+ "notify",
+ "rand",
+ "rayon",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
