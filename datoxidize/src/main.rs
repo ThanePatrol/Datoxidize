@@ -1,22 +1,11 @@
 mod sync_logic;
-mod html_creation;
 
 use std::path::Path;
 use notify::*;
 use std::time::{Duration};
-use std::fs;
 use crate::sync_logic::{create_folder_on_remote, deserialize_config, sync_changed_file};
-use axum::{
-    routing::{get, post},
-    http::StatusCode,
-    response::IntoResponse,
-    Json, Router,
-};
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
-use serde_json::{json, Value};
 
 #[tokio::main]
 async fn main() -> Result<()> {

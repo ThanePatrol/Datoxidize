@@ -451,7 +451,7 @@ mod tests {
         let memes_str = "./example_dir/tea/memes.txt";
         let memes2_str = "./example_dir/tea/memes2.txt";
 
-        let root = Path::new(root_str);
+        let _root = Path::new(root_str);
         std::fs::File::create(memes_str).unwrap();
 
         thread::sleep(Duration::from_secs(2));
