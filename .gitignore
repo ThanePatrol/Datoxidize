@@ -11,8 +11,9 @@ Cargo.lock
 
 # working files for testing purposes
 datoxidize/copy_dir
-datoxidize/example_dir
+client/example_dir
 
-server/storage
+backend/storage
 server/target
 /server/target/
+target

@@ -109,8 +109,8 @@ mod tests {
     async fn copy_file_via_http() {
         let router = router();
         let client = TestClient::new(router);
-        let path = PathBuf::from("../datoxidize/example_dir/test_file_http/lophostemon_occurrences.csv");
-        fs::copy("../datoxidize/test_resources/random_test_files/lophostemon_occurrences.csv",
+        let path = PathBuf::from("../client/example_dir/test_file_http/lophostemon_occurrences.csv");
+        fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
 
         let metadata = std::fs::metadata(path.clone()).unwrap();
@@ -127,15 +127,15 @@ mod tests {
         let final_path = path::Path::new("./storage/vault0/test_file_http/lophostemon_occurrences.csv");
         assert!(final_path.exists());
         remove_dir_contents("./storage/vault0/test_file_http").unwrap();
-        remove_dir_contents("../datoxidize/example_dir/test_file_http").unwrap();
+        remove_dir_contents("../client/example_dir/test_file_http").unwrap();
     }
 
     #[tokio::test]
     async fn copy_nested_file_via_http() {
         let router = router();
         let client = TestClient::new(router);
-        fs::create_dir_all("../datoxidize/example_dir/test_copy_nested_http/http_test/another").unwrap();
-        let file_path = "../datoxidize/example_dir/test_copy_nested_http/http_test/another/test.csv";
+        fs::create_dir_all("../client/example_dir/test_copy_nested_http/http_test/another").unwrap();
+        let file_path = "../client/example_dir/test_copy_nested_http/http_test/another/test.csv";
         fs::File::create(file_path).unwrap();
         fs::write(file_path, "test,content,string".to_string()).unwrap();
 
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(fs::read(copied_path).unwrap(), file_contents);
 
         remove_dir_contents("./storage/vault0/test_copy_nested_http").unwrap();
-        remove_dir_contents("../datoxidize/example_dir/test_copy_nested_http").unwrap();
+        remove_dir_contents("../client/example_dir/test_copy_nested_http").unwrap();
     }
 
     fn remove_dir_contents<P: AsRef<path::Path>>(path: P) -> io::Result<()> {
