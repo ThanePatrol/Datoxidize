@@ -1,6 +1,8 @@
 mod html_creation;
 mod sync_core;
 
+use std::env::current_dir;
+use std::fs;
 use axum::{
     routing::{get, post},
     http::StatusCode,
@@ -17,9 +19,9 @@ async fn main() {
     //init environment variables
     dotenvy::dotenv().unwrap();
 
-    let m_data = std::fs::metadata("./templates/directory.html").unwrap();
+    let m_data = fs::metadata("./templates/directory.html").unwrap();
     println!("{:?}", m_data);
-    let file = std::fs::read("./templates/directory.html").unwrap();
+    let file = fs::read("./templates/directory.html").unwrap();
 
 
     tracing_subscriber::fmt::init();
@@ -64,7 +66,7 @@ async fn get_directories() -> impl IntoResponse {
 }
 
 async fn show_files() -> String {
-    let files = std::fs::read_dir("./storage").unwrap();
+    let files = fs::read_dir("./storage").unwrap();
     let mut files_as_string = String::new();
     for file in files {
         files_as_string.push_str("| ");
@@ -113,11 +115,11 @@ mod tests {
         fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
 
-        let metadata = std::fs::metadata(path.clone()).unwrap();
+        let metadata = fs::metadata(path.clone()).unwrap();
         let file = RemoteFile {
             full_path: path.clone(),
             root_directory: "example_dir".to_string(),
-            contents: std::fs::read(path.clone()).unwrap(),
+            contents: fs::read(path.clone()).unwrap(),
             metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
             vault_id: 0,
         };

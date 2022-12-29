@@ -1,26 +1,32 @@
-FROM rust:1.61.0 as builder
-WORKDIR /usr/src
+FROM rust:latest as builder
+
 RUN rustup target add x86_64-unknown-linux-musl
-RUN apt update && apt install -y musl-tools musl-dev
 
-#RUN USER=root cargo new Datoxidize
 WORKDIR /usr/src/Datoxidize
-
 COPY . .
-RUN cargo build --target x86_64-unknown-linux-musl --release
 
-# startup command to run the binary
-FROM scratch
-COPY --from=builder /usr/src/Datoxidize/target/x86_64-unknown-linux-musl/release/backend ./
+# cd into client and build
+RUN cd client && cargo build --release
+
+# cd into backend and build
+RUN cd backend && cargo build --release
+
+
+
+FROM debian:buster-slim
+
+# Create a folder for the backend to live in with all the resource files
+RUN mkdir -p /usr/local/bin/backend
+COPY --from=builder /usr/src/Datoxidize/target/release/backend /usr/local/bin/backend/backend
+
+# copies the resource files from local dir to working dir
+COPY ./backend/ /usr/local/bin/backend
+
+COPY --from=builder /usr/src/Datoxidize/target/release/client /usr/local/bin/client
+
+WORKDIR /usr/local/bin/backend
 CMD ["./backend"]
 LABEL service=backend
-
-FROM scratch
-COPY --from=builder /usr/src/Datoxidize/target/x86_64-unknown-linux-musl/release/client ./
-CMD ["./client"]
-LABEL service=client
-
-# https://dev.to/rogertorres/first-steps-with-docker-rust-30oi
 
 # docker built -t datoxidize .bac
 # docker run -dp 8080:3000 --rm --name server1 server
