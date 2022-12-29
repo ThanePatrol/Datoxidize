@@ -62,12 +62,7 @@ fn is_client_more_recent_than_server(client: &RemoteFile, server: &PathBuf) -> b
 }
 
 fn is_file_exists(path: &PathBuf) -> bool {
-    let result = std::path::Path::try_exists(path);
-    let exists = match result {
-        Ok(r) => r,
-        Err(_) => false
-    };
-    exists
+   Path::new(path).exists()
 }
 
 
