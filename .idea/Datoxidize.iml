@@ -6,7 +6,10 @@
       <sourceFolder url="file://$MODULE_DIR$/datoxidize/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/datoxidize/test_resources" type="java-test-resource" />
       <sourceFolder url="file://$MODULE_DIR$/datoxidize/resources" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/server/resources" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/server/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/datoxidize/target" />
+      <excludeFolder url="file://$MODULE_DIR$/server/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

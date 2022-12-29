@@ -11,21 +11,13 @@ struct DirEntryHtmlTemplate {
 
 
 fn get_top_level_directories() -> Vec<String> {
-    let root_paths = std::fs::read_dir("./copy_dir").unwrap();
+    let root_paths = std::fs::read_dir("./storage").unwrap();
     root_paths.into_iter().map(|path|
         path.unwrap()
             .path().to_str()
             .unwrap().to_string())
         .collect()
 }
-/*
-pub fn test_print_html() {
-    let paths = get_top_level_directories();
-    let dir_template = DirEntryHtmlTemplate { paths };
-    println!("{}", dir_template.render().unwrap())
-}
-
- */
 
 pub async fn test_render() -> impl IntoResponse {
     let paths = get_top_level_directories();
