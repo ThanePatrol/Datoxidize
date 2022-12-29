@@ -48,6 +48,7 @@ fn router() -> Router {
         .route("/copy", post(copy_file))
 }
 
+
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
     let success = sync_core::sync_file_with_server(payload).await;
@@ -88,27 +89,30 @@ async fn sync_file(Json(payload): Json<FileRaw>) -> impl IntoResponse {
  */
 
 async fn get_synced_file() -> Json<Value> {
-    let file = get_file_from_database();
+    let file = "";
     Json(json!(file))
 }
 
-pub fn get_file_from_database() -> String {
-    std::fs::read_to_string("./storage/test.txt").expect("")
-}
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, io, path};
+    use std::io::Read;
     use std::path::PathBuf;
     use axum::extract::Path;
     use super::*;
     use axum::http::StatusCode;
     use axum_test_helper::TestClient;
+    use serial_test::serial;
 
     #[tokio::test]
     async fn copy_file_via_http() {
         let router = router();
         let client = TestClient::new(router);
-        let path = PathBuf::from("../datoxidize/example_dir/lophostemon_occurrences.csv");
+        let path = PathBuf::from("../datoxidize/example_dir/test_file_http/lophostemon_occurrences.csv");
+        fs::copy("../datoxidize/test_resources/random_test_files/lophostemon_occurrences.csv",
+        &path).unwrap();
+
         let metadata = std::fs::metadata(path.clone()).unwrap();
         let file = RemoteFile {
             full_path: path.clone(),
@@ -120,8 +124,51 @@ mod tests {
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
-        let final_path = std::path::Path::new("./storage/vault0/lophostemon_occurrences.csv");
+        let final_path = path::Path::new("./storage/vault0/test_file_http/lophostemon_occurrences.csv");
         assert!(final_path.exists());
-        std::fs::remove_file("./storage/vault0/lophostemon_occurrences.csv").unwrap();
+        remove_dir_contents("./storage/vault0/test_file_http").unwrap();
+        remove_dir_contents("../datoxidize/example_dir/test_file_http").unwrap();
+    }
+
+    #[tokio::test]
+    async fn copy_nested_file_via_http() {
+        let router = router();
+        let client = TestClient::new(router);
+        fs::create_dir_all("../datoxidize/example_dir/test_copy_nested_http/http_test/another").unwrap();
+        let file_path = "../datoxidize/example_dir/test_copy_nested_http/http_test/another/test.csv";
+        fs::File::create(file_path).unwrap();
+        fs::write(file_path, "test,content,string".to_string()).unwrap();
+
+        let metadata = fs::metadata(file_path).unwrap();
+        let file_contents = fs::read(file_path).unwrap();
+        let file = RemoteFile {
+            full_path: PathBuf::from(file_path),
+            root_directory: "example_dir".to_string(),
+            contents: file_contents.clone(),
+            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
+            vault_id: 0,
+        };
+        let response = client.post("/copy").json(&file).send().await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let copied_path = path::Path::new("./storage/vault0/test_copy_nested_http/http_test/another/test.csv");
+        assert_eq!(fs::read(copied_path).unwrap(), file_contents);
+
+        remove_dir_contents("./storage/vault0/test_copy_nested_http").unwrap();
+        remove_dir_contents("../datoxidize/example_dir/test_copy_nested_http").unwrap();
+    }
+
+    fn remove_dir_contents<P: AsRef<path::Path>>(path: P) -> io::Result<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if entry.file_type()?.is_dir() {
+                remove_dir_contents(&path)?;
+                fs::remove_dir(path)?;
+            } else {
+                fs::remove_file(path)?;
+            }
+        }
+        Ok(())
     }
 }
