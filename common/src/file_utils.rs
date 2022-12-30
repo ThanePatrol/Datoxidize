@@ -1,7 +1,7 @@
-use std::{fs, path};
+use std::{fs};
 use std::error::Error;
-use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime};
 use filetime::FileTime;
 pub use serde::{Deserialize, Serialize};
 use crate::vault_utils::VaultConfig;
@@ -11,7 +11,7 @@ use crate::vault_utils::VaultConfig;
 /// Modified time should be identical and latency with networks can cause different times
 /// Even with a straight copy
 /// vault_id is used to make sure one syncs with the correct vault
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RemoteFile {
     pub full_path: PathBuf,
     pub root_directory: String,
@@ -56,7 +56,7 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
             .expect(&*format!("Error casting {:?} to string", client.full_path))
             .to_string()
             .rsplit_once(vault_root.as_str())
-            .expect("Pattern not found")
+            .expect(&*format!("Pattern {} not found", vault_root))
             .1
             .to_string()
     }
@@ -73,7 +73,6 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
 /// saves the file to the server, if the directory is not present, create it
 pub async fn copy_file(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
     let full_path = get_server_path(client_file, vault_config);
-    println!("full path: {:?}", full_path.clone());
     //todo - handle parent option error by logging
     let directory = full_path.parent().unwrap();
 
@@ -86,4 +85,23 @@ pub async fn copy_file(client_file: &RemoteFile, vault_config: &VaultConfig) -> 
         FileTime::from_system_time(*&client_file.metadata.1))?;
 
     Ok(())
+}
+
+pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
+    fn recursive_walk(path: &PathBuf, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let cur_path = entry.path();
+
+            if entry.file_type()?.is_dir() {
+                recursive_walk(&cur_path, files)?;
+            } else {
+                files.push(cur_path);
+            }
+        }
+        Ok(())
+    }
+    let mut files = Vec::new();
+    recursive_walk(path, &mut files)?;
+    Ok(files)
 }

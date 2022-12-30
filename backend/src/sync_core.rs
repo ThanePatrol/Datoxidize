@@ -1,16 +1,7 @@
 use std::collections::HashMap;
-use std::error::Error;
-use std::{fs, path};
-use std::fs::{Metadata};
-use std::io::Read;
+use std::{fs};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
-use axum::{
-    extract,
-};
-use filetime::FileTime;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use common::file_utils::{copy_file, get_server_path};
 use common::RemoteFile;
 use common::vault_utils::{deserialize_vault_config, VaultConfig};
@@ -55,14 +46,11 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
 }
 
 
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::vault_utils::*;
+    use common::vault_utils::deserialize_vault_config;
+    use std::time::SystemTime;
 
     #[test]
     fn test_get_server_path() {

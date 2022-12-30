@@ -1,7 +1,6 @@
 mod html_creation;
 mod sync_core;
 
-use std::env::current_dir;
 use std::fs;
 use axum::{
     routing::{get, post},
@@ -12,17 +11,14 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use serde_json::{json, Value};
-use common::{RemoteFile, show_files};
+use common::{RemoteFile};
 
 #[tokio::main]
 async fn main() {
     //init environment variables
     dotenvy::dotenv().unwrap();
 
-    let m_data = fs::metadata("./templates/directory.html").unwrap();
-    println!("{:?}", m_data);
-    let file = fs::read("./templates/directory.html").unwrap();
-
+    //let file = fs::read("./templates/directory.html").unwrap();
 
     tracing_subscriber::fmt::init();
 
@@ -41,7 +37,7 @@ async fn main() {
 fn router() -> Router {
     Router::new()
         // `GET /` goes to `root`
-        .route("/", get(show_files))
+        .route("/", get(common::router_utils::show_files))
         // 'GET /show' will display the content posted in /test
         .route("/show", get(get_synced_file))
         // GET show_dirs will show the current list of directories being watched
@@ -53,8 +49,10 @@ fn router() -> Router {
 
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
+    let path = payload.full_path.clone();
     let success = sync_core::sync_file_with_server(payload).await;
     if success {
+        println!("saved file successfully :) {:?}", path);
         StatusCode::OK
     } else {
         StatusCode::INTERNAL_SERVER_ERROR
@@ -64,7 +62,6 @@ async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
 async fn get_directories() -> impl IntoResponse {
     html_creation::test_render().await
 }
-
 
 
 async fn get_synced_file() -> Json<Value> {

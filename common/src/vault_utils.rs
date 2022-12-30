@@ -12,6 +12,9 @@ pub struct VaultConfig {
     pub sync_frequency: Duration,
 }
 
+/// Deserializes a vault relative to the working directory of where it is called from
+/// If called from the backend it will be looking for a directory of ./backend/resources/vault_config.json
+/// This allows for different test configs and production configs to be retrieved from the same address
 pub fn deserialize_vault_config() -> HashMap<i32, VaultConfig> {
     let mut json = String::new();
     fs::File::open("./resources/vault_config.json")
