@@ -1,4 +1,5 @@
 mod sync_logic;
+mod http_core;
 
 use std::path::Path;
 use notify::*;

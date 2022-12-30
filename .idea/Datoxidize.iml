@@ -9,8 +9,8 @@
       <sourceFolder url="file://$MODULE_DIR$/client/resources" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/client/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/client/test_resources" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/common/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/datoxidize/target" />
-      <excludeFolder url="file://$MODULE_DIR$/server/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

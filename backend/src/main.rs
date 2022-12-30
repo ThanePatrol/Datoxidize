@@ -12,7 +12,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use serde_json::{json, Value};
-use crate::sync_core::RemoteFile;
+use common::RemoteFile;
 
 #[tokio::main]
 async fn main() {
@@ -114,15 +114,7 @@ mod tests {
         let path = PathBuf::from("../client/example_dir/test_file_http/lophostemon_occurrences.csv");
         fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
-
-        let metadata = fs::metadata(path.clone()).unwrap();
-        let file = RemoteFile {
-            full_path: path.clone(),
-            root_directory: "example_dir".to_string(),
-            contents: fs::read(path.clone()).unwrap(),
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
-            vault_id: 0,
-        };
+        let file = common::RemoteFile::new(path, "example_dir".to_string(), 0);
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -141,19 +133,12 @@ mod tests {
         fs::File::create(file_path).unwrap();
         fs::write(file_path, "test,content,string".to_string()).unwrap();
 
-        let metadata = fs::metadata(file_path).unwrap();
-        let file_contents = fs::read(file_path).unwrap();
-        let file = RemoteFile {
-            full_path: PathBuf::from(file_path),
-            root_directory: "example_dir".to_string(),
-            contents: file_contents.clone(),
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
-            vault_id: 0,
-        };
+        let file = common::RemoteFile::new(PathBuf::from(file_path), "example_dir".to_string(), 0);
+
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
         let copied_path = path::Path::new("./storage/vault0/test_copy_nested_http/http_test/another/test.csv");
-        assert_eq!(fs::read(copied_path).unwrap(), file_contents);
+        assert_eq!(fs::read(copied_path).unwrap(), file.contents);
 
         remove_dir_contents("./storage/vault0/test_copy_nested_http").unwrap();
         remove_dir_contents("../client/example_dir/test_copy_nested_http").unwrap();

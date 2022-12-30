@@ -11,23 +11,12 @@ use axum::{
 use filetime::FileTime;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use common::RemoteFile;
 
 static  VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
         deserialize_vault_config()
     });
 
-/// Metadata tuple format: (access_time, modified_time, file_size_bytes)
-/// Modified time should be identical and latency with networks can cause different times
-/// Even with a straight copy
-/// vault_id is used to make sure one syncs with the correct vault
-#[derive(Serialize, Deserialize)]
-pub struct RemoteFile {
-    pub(crate) full_path: PathBuf,
-    pub(crate) root_directory: String,
-    pub(crate) contents: Vec<u8>,
-    pub(crate) metadata: (SystemTime, SystemTime, u64),
-    pub(crate) vault_id: i32,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VaultConfig {
@@ -152,15 +141,14 @@ mod tests {
 
     #[test]
     fn test_get_server_path() {
-        let client = RemoteFile {
-            full_path: PathBuf::from("../datoxidize/example_dir/lophostemon_occurrences.csv"),
-            root_directory: "example_dir".to_string(),
-            contents: vec![],
-            metadata: (SystemTime::now(), SystemTime::now(), 0),
-            vault_id: 0,
-        };
+        let file = common::RemoteFile::new_empty(
+            PathBuf::from("../datoxidize/example_dir/lophostemon_occurrences.csv"),
+        "example_dir".to_string(),
+        0,
+        );
+
         let vault = deserialize_vault_config();
-        let path = get_server_path(&client, &vault.get(&0).unwrap());
+        let path = get_server_path(&file, &vault.get(&0).unwrap());
         assert_eq!(path.as_os_str().to_str().unwrap(), "./storage/vault0/lophostemon_occurrences.csv");
     }
 
@@ -182,15 +170,6 @@ mod tests {
     fn is_client_more_recent_than_server() {
 
     }
-
-    /*
-    #[test]
-    fn create_dummy_server_config() {
-        create_vault_config();
-        assert!(Path::new("./resources/vault_config.json").exists())
-    }
-
-     */
 
 
 }
