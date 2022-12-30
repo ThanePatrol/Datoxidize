@@ -48,3 +48,30 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use axum::Router;
+    use axum::routing::{
+        get,
+        post
+    };
+    use super::*;
+    use common::*;
+
+    #[tokio::test]
+    async fn test_send_file_to_backend() {
+
+    }
+
+    // a test router for use in testing client
+    fn router() -> Router {
+        Router::new()
+            //show files to show files present in vault
+            .route("/", get(common::show_files))
+            //post files to test storage
+            .route("/send_files", post(common::copy_files))
+
+    }
+
+}
+

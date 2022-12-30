@@ -12,7 +12,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use serde_json::{json, Value};
-use common::RemoteFile;
+use common::{RemoteFile, show_files};
 
 #[tokio::main]
 async fn main() {
@@ -65,30 +65,7 @@ async fn get_directories() -> impl IntoResponse {
     html_creation::test_render().await
 }
 
-async fn show_files() -> String {
-    let files = fs::read_dir("./storage").unwrap();
-    let mut files_as_string = String::new();
-    for file in files {
-        files_as_string.push_str("| ");
-        files_as_string.push_str(file.unwrap().file_name().to_str().unwrap());
-        files_as_string.push_str("\n")
-    }
-    files_as_string
-}
 
-/*
-async fn sync_file(Json(payload): Json<FileRaw>) -> impl IntoResponse {
-    //convert the raw data from front end into a
-    let string_form = std::str::from_utf8(&*payload.content).unwrap();
-    let file = FileHumanReadable {
-        content: string_form.to_string(),
-    };
-
-    //converted
-    (StatusCode::CREATED, Json(file))
-}
-
- */
 
 async fn get_synced_file() -> Json<Value> {
     let file = "";
@@ -99,13 +76,10 @@ async fn get_synced_file() -> Json<Value> {
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path};
-    use std::io::Read;
     use std::path::PathBuf;
-    use axum::extract::Path;
     use super::*;
     use axum::http::StatusCode;
     use axum_test_helper::TestClient;
-    use serial_test::serial;
 
     #[tokio::test]
     async fn copy_file_via_http() {

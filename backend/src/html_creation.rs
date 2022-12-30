@@ -4,7 +4,6 @@ use axum::response::{IntoResponse, Response};
 
 #[derive(Template, Debug)]
 #[template(path = "directory.html")]
-
 struct DirEntryHtmlTemplate {
     paths: Vec<String>,
 }

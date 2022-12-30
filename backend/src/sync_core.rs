@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs;
+use std::{fs, path};
 use std::fs::{Metadata};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -11,53 +11,35 @@ use axum::{
 use filetime::FileTime;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use common::file_utils::{copy_file, get_server_path};
 use common::RemoteFile;
+use common::vault_utils::{deserialize_vault_config, VaultConfig};
 
-static  VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
+static VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
         deserialize_vault_config()
-    });
+});
 
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct VaultConfig {
-    full_path: PathBuf,
-    vault_id: i32,
-    sync_frequency: Duration,
-}
-
-/*fn get_relative_path(client: &PathBuf, server: &PathBuf) -> PathBuf {
-    pathdiff::diff_paths(client, server)
-        .expect(&*format!("Called get_relative_path on client {:?} and server {:?}", client, server))
-}
-
- */
-
-
-/// Returns true if client has a more recent copy of a file
-fn is_client_more_recent_than_server(client: &RemoteFile, server: &PathBuf) -> bool {
-    if !is_file_exists(server) {
+/// Returns true if sender has a more recent copy of a file than local
+pub fn is_client_more_recent_than_server(remote: &RemoteFile, local: &PathBuf) -> bool {
+    if !Path::new(local).exists() {
         return true
     }
     let mdata_err_msg = "Can't read metadata on this platform";
 
-    let server_metadata = std::fs::metadata(server)
-        .expect(&*format!("Error reading metadata from {:?}", server));
+    let server_metadata = fs::metadata(local)
+        .expect(&*format!("Error reading metadata from {:?}", local));
 
-    let client_time = client.metadata.1;
+    let client_time = remote.metadata.1;
     let server_time = server_metadata.modified()
         .expect(mdata_err_msg);
 
     client_time > server_time
 }
 
-fn is_file_exists(path: &PathBuf) -> bool {
-   Path::new(path).exists()
-}
-
-
 //todo - set metadata from local to payload
 //todo log error messages rather than unwrapping
-pub async fn sync_file_with_server(payload: RemoteFile) -> bool{
+pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
     let vaults = &VAULT_CONFIGS;
     let config = vaults.get(&payload.vault_id)
         .expect("Vault_id not found");
@@ -72,76 +54,19 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool{
     }
 }
 
-//todo - implement diff_copy to only sync differences
-/// saves the file to the server, if the directory is not present, create it
-async fn copy_file(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
-    let full_path = get_server_path(client_file, vault_config);
-    println!("full path: {:?}", full_path.clone());
-    //todo - handle parent option error by logging
-    let directory = full_path.parent().unwrap();
 
-    fs::create_dir_all(directory)?;
-    fs::write(&full_path, &client_file.contents)?;
 
-    filetime::set_file_times(
-        full_path,
-        FileTime::from_system_time(*&client_file.metadata.0),
-        FileTime::from_system_time(*&client_file.metadata.1))?;
 
-    Ok(())
-}
-
-fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
-    fn build_server_dir_structure(client: &RemoteFile) -> String {
-        let vault_root = client.root_directory.clone();
-        client.full_path
-            .clone()
-            .as_os_str()
-            .to_str()
-            .expect(&*format!("Error casting {:?} to string", client.full_path))
-            .to_string()
-            .rsplit_once(vault_root.as_str())
-            .expect("Pattern not found")
-            .1
-            .to_string()
-    }
-
-    let mut path = String::from("./storage/");
-    path.push_str("vault");
-    path.push_str(&vault.vault_id.to_string());
-    path.push_str(build_server_dir_structure(client).as_str());
-
-    PathBuf::from(path)
-}
-
-fn deserialize_vault_config() -> HashMap<i32, VaultConfig> {
-    let mut json = String::new();
-    std::fs::File::open("./resources/vault_config.json")
-        .expect("Vault config not found")
-        .read_to_string(&mut json)
-        .expect("Error reading vault config");
-    let str = json.as_str();
-    serde_json::from_str(str).expect("Error in format of vault_config.json")
-}
-
-fn create_vault_config() {
-    let test_vaults = HashMap::from([(0, VaultConfig {
-        full_path: PathBuf::from("./storage/"),
-        vault_id: 0,
-        sync_frequency: Duration::from_secs(5),
-    })]);
-    let ser = serde_json::to_string(&test_vaults).unwrap();
-    fs::write(Path::new("./resources/vault_config.json"), &ser).unwrap()
-}
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::vault_utils::*;
 
     #[test]
     fn test_get_server_path() {
-        let file = common::RemoteFile::new_empty(
+        let file = RemoteFile::new_empty(
             PathBuf::from("../datoxidize/example_dir/lophostemon_occurrences.csv"),
         "example_dir".to_string(),
         0,
