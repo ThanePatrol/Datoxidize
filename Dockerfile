@@ -19,6 +19,9 @@ FROM debian:buster-slim
 RUN mkdir -p /usr/local/bin/backend
 COPY --from=builder /usr/src/Datoxidize/target/release/backend /usr/local/bin/backend/backend
 
+# todo - change this to add new user then chown instead as chmod 777 isn't great for security
+RUN chmod -R 777 /usr/local/bin/backend
+
 # copies the resource files from local dir to working dir
 COPY ./backend/ /usr/local/bin/backend
 

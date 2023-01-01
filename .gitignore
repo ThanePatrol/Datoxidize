@@ -17,3 +17,4 @@ backend/storage
 server/target
 /server/target/
 target
+docker_persistence

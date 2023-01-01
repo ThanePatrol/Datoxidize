@@ -50,6 +50,7 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
     use std::path::PathBuf;
     use axum::{Json, Router};
     use axum::http::StatusCode;
@@ -68,7 +69,8 @@ mod tests {
 
         let file_path = PathBuf::from("./test_resources/random_test_files/lophostemon_occurrences.csv");
         std::fs::copy(&file_path, "./example_dir/lophostemon_occurrences.csv").unwrap();
-        let file = RemoteFile::new(file_path, "example_dir".to_string(), 0);
+        let copied_file = PathBuf::from("./example_dir/lophostemon_occurrences.csv");
+        let file = RemoteFile::new(copied_file, "example_dir".to_string(), 0);
 
         let response = server.post("/copy_to_server").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);

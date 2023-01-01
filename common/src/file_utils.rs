@@ -1,6 +1,6 @@
 use std::{fs};
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::time::{SystemTime};
 use filetime::FileTime;
 pub use serde::{Deserialize, Serialize};

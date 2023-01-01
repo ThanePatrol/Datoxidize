@@ -5,14 +5,6 @@ pub async fn init_sync() {
     let files = get_list_of_files_for_updating();
     let client = reqwest::Client::new();
 
-   let res = reqwest::get("http://localhost:8080")
-       .await
-       .unwrap()
-       .text()
-       .await
-       .unwrap();
-    println!("response is {}", res);
-
     for file in files {
 
         let response = client
@@ -26,7 +18,7 @@ pub async fn init_sync() {
     }
 }
 
-//todo - make a general syncing
+//todo - make a struct that simply has the file metadata, not the entire file
 fn get_list_of_files_for_updating() -> Vec<RemoteFile>{
     let mut files = Vec::new();
     let path = PathBuf::from("./client/example_dir");
