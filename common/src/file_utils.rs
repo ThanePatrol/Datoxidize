@@ -4,9 +4,9 @@ use std::path::{PathBuf};
 use std::time::{SystemTime};
 use filetime::FileTime;
 pub use serde::{Deserialize, Serialize};
-use crate::vault_utils::VaultConfig;
+use crate::config_utils::{DirectoryConfig, VaultConfig};
 
-
+//todo - add file_id
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
 /// Even with a straight copy
@@ -44,6 +44,42 @@ impl RemoteFile {
     }
 }
 
+/// Metadata tuple format: (access_time, modified_time, file_size_bytes)
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoteFileMetadata {
+    pub full_path: PathBuf,
+    pub root_directory: String,
+    pub metadata: (SystemTime, SystemTime, u64),
+    pub vault_id: i32,
+    pub file_id: i32,
+}
+
+impl RemoteFileMetadata {
+    pub fn new(path: PathBuf, root_dir: String, vault_id: i32) -> Self {
+        let metadata = fs::metadata(path.clone()).unwrap();
+        RemoteFileMetadata {
+            full_path: path,
+            root_directory: root_dir,
+            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
+            vault_id,
+            file_id: -1,
+        }
+    }
+}
+
+/// Returns a tuple of Vecs, the 0th item contains the vec of files that are more recent on client
+/// The 1st item contains a vec of files that are more recent on the server
+pub fn get_list_of_newer_files(
+    client: &Vec<RemoteFileMetadata>,
+    server: &Vec<RemoteFileMetadata>) -> (Vec<RemoteFileMetadata>, Vec<RemoteFileMetadata>) {
+
+    let mut client_new = Vec::new();
+    let mut server_new = Vec::new();
+
+
+
+    (client_new, server_new)
+}
 
 
 pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
@@ -69,9 +105,16 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
     PathBuf::from(path)
 }
 
+pub async fn copy_file_to_local(server_file: &RemoteFile,
+                                directory_config: &DirectoryConfig)
+    -> Result<(), Box<dyn Error>> {
+
+    Ok(())
+}
+
 //todo - implement diff_copy to only sync differences
 /// saves the file to the server, if the directory is not present, create it
-pub async fn copy_file(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
+pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
     let full_path = get_server_path(client_file, vault_config);
     //todo - handle parent option error by logging
     let directory = full_path.parent().unwrap();
@@ -104,4 +147,20 @@ pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> 
     let mut files = Vec::new();
     recursive_walk(path, &mut files)?;
     Ok(files)
+}
+
+pub fn get_all_file_metadata(path: &PathBuf, vault_config: &VaultConfig) -> Vec<RemoteFileMetadata> {
+    let file_paths = get_all_files_from_path(path)
+        .expect(&*format!("Error reading path: {}", path.display()));
+
+    let mut files = Vec::with_capacity(file_paths.len());
+
+    for file_path in file_paths {
+        let file = RemoteFileMetadata::new(
+            file_path.clone(),
+            vault_config.vault_root.clone(),
+            vault_config.vault_id);
+        files.push(file)
+    }
+    files
 }

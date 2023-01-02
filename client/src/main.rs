@@ -1,21 +1,30 @@
-mod sync_logic;
+mod old_sync_logic;
 mod http_sync;
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use notify::*;
-use crate::sync_logic::{create_folder_on_remote, deserialize_config, sync_changed_file};
+use crate::old_sync_logic::{create_folder_on_remote, sync_changed_file};
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
+use common::config_utils::{deserialize_config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
 
 
-    let dir_settings = deserialize_config("./client/test_resources/config.json".to_string()).unwrap();
+    let path = PathBuf::from("./client/test_resources/config.json");
+
+    let dir_map = deserialize_config(&path).unwrap();
+
+    let dir_settings = dir_map.get(&0).unwrap().clone();
     let watched_dir = &dir_settings.content_directory.clone();
     let frequency = dir_settings.sync_frequency.clone();
 
-    http_sync::init_sync().await;
+    //todo - store remote url in config
+    let url = reqwest::Url::parse("http://localhost:8080").unwrap();
+
+    http_sync::init_sync(&dir_map, &url).await;
 
     //sync_logic::initial_sync(&dir_settings);
 
@@ -35,12 +44,13 @@ async fn main() -> Result<()> {
             } else if event.kind.is_create()  && event.kind == Create(Folder) {
                 create_folder_on_remote(&event.paths, &dir_settings);
             } else if event.kind.is_remove() {
-                sync_logic::remove_files_and_dirs_from_remote(&event.paths, &dir_settings);
+                old_sync_logic::remove_files_and_dirs_from_remote(&event.paths, &dir_settings);
             }
         }, Config::default()
             .with_poll_interval(frequency))?;
 
     watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive)?;
+
 
 
     Ok(())
@@ -50,7 +60,6 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use std::path::PathBuf;
     use axum::{Json, Router};
     use axum::http::StatusCode;
@@ -70,10 +79,12 @@ mod tests {
         let file_path = PathBuf::from("./test_resources/random_test_files/lophostemon_occurrences.csv");
         std::fs::copy(&file_path, "./example_dir/lophostemon_occurrences.csv").unwrap();
         let copied_file = PathBuf::from("./example_dir/lophostemon_occurrences.csv");
-        let file = RemoteFile::new(copied_file, "example_dir".to_string(), 0);
+        let file = RemoteFile::new(copied_file.clone(), "example_dir".to_string(), 0);
 
         let response = server.post("/copy_to_server").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
+        std::fs::remove_file(copied_file).unwrap();
+
     }
 
     // a test router for use in testing client
@@ -95,12 +106,12 @@ mod tests {
     }
 
     async fn sync_file_with_server(payload: RemoteFile) -> bool {
-        let vaults = vault_utils::deserialize_vault_config();
+        let vaults = config_utils::deserialize_vault_config();
         let vault = vaults
             .get(&payload.vault_id)
             .unwrap();
 
-        file_utils::copy_file(&payload, &vault).await.unwrap();
+        file_utils::copy_file_to_server(&payload, &vault).await.unwrap();
         true
     }
 

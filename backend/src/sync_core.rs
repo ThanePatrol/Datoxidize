@@ -2,14 +2,15 @@ use std::collections::HashMap;
 use std::{fs};
 use std::path::{Path, PathBuf};
 use once_cell::sync::Lazy;
-use common::file_utils::{copy_file, get_server_path};
+use common::file_utils::{copy_file_to_server, get_server_path};
 use common::RemoteFile;
-use common::vault_utils::{deserialize_vault_config, VaultConfig};
+use common::config_utils::{deserialize_vault_config, VaultConfig};
 
 static VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
         deserialize_vault_config()
 });
 
+//pub async fn send_list_of_newer_files_to_client(local_files: Vec<RemoteFile>, )
 
 /// Returns true if sender has a more recent copy of a file than local
 pub fn is_client_more_recent_than_server(remote: &RemoteFile, local: &PathBuf) -> bool {
@@ -38,7 +39,7 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
     println!("Path: {}", server_file_path.display());
 
     if is_client_more_recent_than_server(&payload, &server_file_path) {
-        copy_file(&payload, &config).await.unwrap();
+        copy_file_to_server(&payload, &config).await.unwrap();
         true
     } else {
         false
@@ -49,7 +50,7 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::vault_utils::deserialize_vault_config;
+    use common::config_utils::deserialize_vault_config;
     use std::time::SystemTime;
 
     #[test]

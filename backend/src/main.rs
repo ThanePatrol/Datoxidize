@@ -1,5 +1,6 @@
 mod html_creation;
 mod sync_core;
+mod db_api;
 
 use std::fs;
 use axum::{
@@ -8,15 +9,17 @@ use axum::{
     response::IntoResponse,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use common::{RemoteFile};
+use sync_core::sync_file_with_server;
 
 #[tokio::main]
 async fn main() {
     //init environment variables
-    dotenvy::dotenv().unwrap();
+    dotenvy::from_path("./backend/.env").unwrap();
+    let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await.unwrap();
 
     //let file = fs::read("./templates/directory.html").unwrap();
 
@@ -50,7 +53,7 @@ fn router() -> Router {
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
     let path = payload.full_path.clone();
-    let success = sync_core::sync_file_with_server(payload).await;
+    let success = sync_file_with_server(payload).await;
     if success {
         println!("saved file successfully :) {:?}", path);
         StatusCode::OK
