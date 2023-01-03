@@ -1,7 +1,7 @@
 mod html_creation;
 mod sync_core;
+mod db_api;
 
-use std::env::current_dir;
 use std::fs;
 use axum::{
     routing::{get, post},
@@ -9,25 +9,28 @@ use axum::{
     response::IntoResponse,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use axum::extract::State;
+use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
-use crate::sync_core::RemoteFile;
+use sqlx::{Pool, Sqlite};
+use common::{RemoteFile};
+use common::file_utils::RemoteFileMetadata;
+use sync_core::sync_file_with_server;
+use crate::db_api::init_client_sync;
 
 #[tokio::main]
 async fn main() {
     //init environment variables
-    dotenvy::dotenv().unwrap();
+    dotenvy::from_path("./backend/.env").unwrap();
+    let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await.unwrap();
 
-    let m_data = fs::metadata("./templates/directory.html").unwrap();
-    println!("{:?}", m_data);
-    let file = fs::read("./templates/directory.html").unwrap();
-
+    //let file = fs::read("./templates/directory.html").unwrap();
 
     tracing_subscriber::fmt::init();
 
     // Building application routes
-    let router = router();
+    let router = router(pool);
 
     // listening on localhost
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
@@ -38,23 +41,34 @@ async fn main() {
         .await.unwrap();
 }
 
-fn router() -> Router {
+fn router(pool: Pool<Sqlite>) -> Router {
     Router::new()
         // `GET /` goes to `root`
-        .route("/", get(show_files))
+        .route("/", get(common::router_utils::show_files))
         // 'GET /show' will display the content posted in /test
         .route("/show", get(get_synced_file))
         // GET show_dirs will show the current list of directories being watched
         .route("/show_dirs", get(get_directories))
         // POST /copy takes a JSON form of a file and copies it to the server
         .route("/copy", post(copy_file))
+        //POST /copy/init takes JSON RemoteFileMetadata and responds with various HTTP codes depending on what needs to be done next
+        .route("/copy/init", post(init_sync))
+
+        .with_state(pool)
 }
 
+async fn init_sync(State(pool): State<Pool<Sqlite>>, Json(payload): Json<Vec<Vec<RemoteFileMetadata>>>) -> impl IntoResponse {
+    println!("hit init_sync");
+    let code = init_client_sync(&pool, payload).await;
+    code
+}
 
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
-    let success = sync_core::sync_file_with_server(payload).await;
+    let path = payload.full_path.clone();
+    let success = sync_file_with_server(payload).await;
     if success {
+        println!("saved file successfully :) {:?}", path);
         StatusCode::OK
     } else {
         StatusCode::INTERNAL_SERVER_ERROR
@@ -65,30 +79,6 @@ async fn get_directories() -> impl IntoResponse {
     html_creation::test_render().await
 }
 
-async fn show_files() -> String {
-    let files = fs::read_dir("./storage").unwrap();
-    let mut files_as_string = String::new();
-    for file in files {
-        files_as_string.push_str("| ");
-        files_as_string.push_str(file.unwrap().file_name().to_str().unwrap());
-        files_as_string.push_str("\n")
-    }
-    files_as_string
-}
-
-/*
-async fn sync_file(Json(payload): Json<FileRaw>) -> impl IntoResponse {
-    //convert the raw data from front end into a
-    let string_form = std::str::from_utf8(&*payload.content).unwrap();
-    let file = FileHumanReadable {
-        content: string_form.to_string(),
-    };
-
-    //converted
-    (StatusCode::CREATED, Json(file))
-}
-
- */
 
 async fn get_synced_file() -> Json<Value> {
     let file = "";
@@ -99,13 +89,10 @@ async fn get_synced_file() -> Json<Value> {
 #[cfg(test)]
 mod tests {
     use std::{fs, io, path};
-    use std::io::Read;
     use std::path::PathBuf;
-    use axum::extract::Path;
     use super::*;
     use axum::http::StatusCode;
     use axum_test_helper::TestClient;
-    use serial_test::serial;
 
     #[tokio::test]
     async fn copy_file_via_http() {
@@ -114,15 +101,7 @@ mod tests {
         let path = PathBuf::from("../client/example_dir/test_file_http/lophostemon_occurrences.csv");
         fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
-
-        let metadata = fs::metadata(path.clone()).unwrap();
-        let file = RemoteFile {
-            full_path: path.clone(),
-            root_directory: "example_dir".to_string(),
-            contents: fs::read(path.clone()).unwrap(),
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
-            vault_id: 0,
-        };
+        let file = common::RemoteFile::new(path, "example_dir".to_string(), 0);
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -141,19 +120,12 @@ mod tests {
         fs::File::create(file_path).unwrap();
         fs::write(file_path, "test,content,string".to_string()).unwrap();
 
-        let metadata = fs::metadata(file_path).unwrap();
-        let file_contents = fs::read(file_path).unwrap();
-        let file = RemoteFile {
-            full_path: PathBuf::from(file_path),
-            root_directory: "example_dir".to_string(),
-            contents: file_contents.clone(),
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
-            vault_id: 0,
-        };
+        let file = common::RemoteFile::new(PathBuf::from(file_path), "example_dir".to_string(), 0);
+
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
         let copied_path = path::Path::new("./storage/vault0/test_copy_nested_http/http_test/another/test.csv");
-        assert_eq!(fs::read(copied_path).unwrap(), file_contents);
+        assert_eq!(fs::read(copied_path).unwrap(), file.contents);
 
         remove_dir_contents("./storage/vault0/test_copy_nested_http").unwrap();
         remove_dir_contents("../client/example_dir/test_copy_nested_http").unwrap();

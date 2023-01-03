@@ -1,17 +1,19 @@
 use askama::Template;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use dotenvy::var;
 
 #[derive(Template, Debug)]
 #[template(path = "directory.html")]
-
 struct DirEntryHtmlTemplate {
     paths: Vec<String>,
 }
 
 
 fn get_top_level_directories() -> Vec<String> {
-    let root_paths = std::fs::read_dir("./storage").unwrap();
+    let root_paths = std::fs::read_dir(var("TEST_STORAGE").unwrap())
+        .expect(&*format!("Could not find storage_vault at {}", var("TEST_STORAGE").unwrap()));
+
     root_paths.into_iter().map(|path|
         path.unwrap()
             .path().to_str()

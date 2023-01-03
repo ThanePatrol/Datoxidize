@@ -5,6 +5,7 @@ use std::path::{PathBuf};
 use std::time::{Duration, SystemTime};
 use notify::*;
 use serde::{Deserialize, Serialize};
+use common::config_utils::DirectoryConfig;
 
 /// root_directory specifies the directory for the syncing to occur, this should
 /// mirror the local dir exactly
@@ -12,30 +13,7 @@ use serde::{Deserialize, Serialize};
 /// Remote will have "dir{directory_id}/" appended to the front of the path
 /// where directory_id is a unique i32
 /// Sync frequency is specified
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DirectoryConfig {
-    pub content_directory: String,
-    pub remote_relative_directory: String,
-    pub directory_id: i32,
-    pub sync_frequency: Duration,
-    pub ignored_files: HashSet<PathBuf>,
-}
 
-impl DirectoryConfig {
-    pub fn _new(content_directory: String, directory_id: i32, sync_frequency: Duration) -> Self {
-        let mut remote_relative_directory = dotenvy::var("ROOT_STORAGE").unwrap();
-        remote_relative_directory.push_str("dir");
-        remote_relative_directory.push_str(directory_id.to_string().as_str());
-        remote_relative_directory.push('/');
-        DirectoryConfig {
-            content_directory,
-            remote_relative_directory,
-            directory_id,
-            sync_frequency,
-            ignored_files: HashSet::new(),
-        }
-    }
-}
 
 /// Public API that reads through directories and syncs files and directories
 pub fn initial_sync(directory: &DirectoryConfig) {
@@ -283,18 +261,7 @@ fn remove_path_approximate_from_config(relative_dir: &mut String) -> String {
     relative_dir.to_string()
 }
 
-pub fn _serialize_config_settings(config: &DirectoryConfig, path: String) -> Result<()> {
-    let serial = serde_json::to_string(config).unwrap();
-    let mut file = std::fs::File::create(path)?;
-    write!(file, "{}", serial).expect("Error serializing config");
-    Ok(())
-}
 
-pub fn deserialize_config(path: String) -> Result<DirectoryConfig> {
-    let mut json = String::new();
-    std::fs::File::open(path)?.read_to_string(&mut json)?;
-    Ok(serde_json::from_str(&json).unwrap())
-}
 
 //todo write tests for directory creation and deletion
 #[cfg(test)]
