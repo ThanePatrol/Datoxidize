@@ -10,10 +10,14 @@ use axum::{
     Json, Router,
 };
 use std::net::SocketAddr;
+use axum::extract::State;
 use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
+use sqlx::{Pool, Sqlite};
 use common::{RemoteFile};
+use common::file_utils::RemoteFileMetadata;
 use sync_core::sync_file_with_server;
+use crate::db_api::init_client_sync;
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +30,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // Building application routes
-    let router = router();
+    let router = router(pool);
 
     // listening on localhost
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
@@ -37,7 +41,7 @@ async fn main() {
         .await.unwrap();
 }
 
-fn router() -> Router {
+fn router(pool: Pool<Sqlite>) -> Router {
     Router::new()
         // `GET /` goes to `root`
         .route("/", get(common::router_utils::show_files))
@@ -47,8 +51,17 @@ fn router() -> Router {
         .route("/show_dirs", get(get_directories))
         // POST /copy takes a JSON form of a file and copies it to the server
         .route("/copy", post(copy_file))
+        //POST /copy/init takes JSON RemoteFileMetadata and responds with various HTTP codes depending on what needs to be done next
+        .route("/copy/init", post(init_sync))
+
+        .with_state(pool)
 }
 
+async fn init_sync(State(pool): State<Pool<Sqlite>>, Json(payload): Json<Vec<Vec<RemoteFileMetadata>>>) -> impl IntoResponse {
+    println!("hit init_sync");
+    let code = init_client_sync(&pool, payload).await;
+    code
+}
 
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {

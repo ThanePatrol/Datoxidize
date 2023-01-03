@@ -45,7 +45,7 @@ impl RemoteFile {
 }
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoteFileMetadata {
     pub full_path: PathBuf,
     pub root_directory: String,

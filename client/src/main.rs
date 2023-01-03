@@ -7,11 +7,11 @@ use notify::*;
 use crate::old_sync_logic::{create_folder_on_remote, sync_changed_file};
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
+use tokio::sync::futures;
 use common::config_utils::{deserialize_config};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
 
     let path = PathBuf::from("./client/test_resources/config.json");
 
@@ -22,9 +22,12 @@ async fn main() -> Result<()> {
     let frequency = dir_settings.sync_frequency.clone();
 
     //todo - store remote url in config
-    let url = reqwest::Url::parse("http://localhost:8080").unwrap();
-
+    let url = reqwest::Url::parse("http://localhost:3000").unwrap();
+    println!("calling init sync");
     http_sync::init_sync(&dir_map, &url).await;
+
+
+    println!("here");
 
     //sync_logic::initial_sync(&dir_settings);
 
@@ -32,7 +35,7 @@ async fn main() -> Result<()> {
     //todo - use a timer to determine when file was last modified
     //todo - if there is another event before this timer reaches 0, reset the timer
     //todo - so if a file is edited many times it will only be synced after a period of inactivity
-
+    /*
     //NB - This watcher needs to be initiated like this to allow for asynchronous runtime be
     //between web server and notifications
     let mut watcher =
@@ -52,6 +55,8 @@ async fn main() -> Result<()> {
     watcher.watch(Path::new(watched_dir.as_str()), RecursiveMode::Recursive)?;
 
 
+
+     */
 
     Ok(())
 }
