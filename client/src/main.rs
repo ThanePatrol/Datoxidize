@@ -1,5 +1,6 @@
 mod old_sync_logic;
 mod http_sync;
+mod client_db_api;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -13,6 +14,10 @@ use common::config_utils::{deserialize_config};
 #[tokio::main]
 async fn main() -> Result<()> {
 
+    dotenvy::from_path("./client/.env").unwrap();
+    //let pool = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
+
+
     let path = PathBuf::from("./client/test_resources/config.json");
 
     let dir_map = deserialize_config(&path).unwrap();
@@ -24,8 +29,7 @@ async fn main() -> Result<()> {
     //todo - store remote url in config
     let url = reqwest::Url::parse("http://localhost:3000").unwrap();
     println!("calling init sync");
-    http_sync::init_sync(&dir_map, &url).await;
-
+    http_sync::init_sync(url).await?;
 
     println!("here");
 

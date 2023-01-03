@@ -4,18 +4,33 @@ use std::path::PathBuf;
 use axum::http;
 use common::RemoteFile;
 use http::StatusCode;
-use reqwest::Url;
+use reqwest::{Client, Url};
 use common::config_utils::{DirectoryConfig, VaultConfig};
-use common::file_utils::RemoteFileMetadata;
+use common::file_utils::{MetadataBlob, FileMetadata};
 
-pub async fn init_sync(local_configs: &HashMap<i32, DirectoryConfig>, url: &Url) -> StatusCode {
-    //let remote_configs = get_remote_config(url).await;
+/// Main api that is called on launch of client
+/// Will make request to server for a list of all files and their metadata
+/// Once received, go through the list of files, if there is something more recent on server
+/// It makes a request for that file, if the file is more recent on the client, send it to server
+pub async fn init_sync(url: Url) -> Result<(), Box<dyn Error>> {
 
-    let reponse = send_init_list_of_local_files().await;
+    let client = Client::new();
+    let mut endpoint = url.clone();
+    endpoint.set_path("/copy/metadata_blob");
+    let server_metadata = get_metadata_from_server(&client, endpoint).await?;
+    println!("metadata blo=b: {:?}", server_metadata);
 
-    println!("sent to remote with response of {:?}", reponse);
+    Ok(())
+}
 
-    StatusCode::OK
+/// Gets the every file and its update time from server
+async fn get_metadata_from_server(client: &Client, url: Url) -> Result<MetadataBlob, Box<dyn Error>> {
+    client
+        .get(url)
+        .send()
+        .await?
+        .json()
+        .await?
 }
 
 async fn send_init_list_of_local_files() -> StatusCode {
@@ -64,13 +79,13 @@ async fn send_local_files_to_remote() -> StatusCode {
 }
 
 //todo - make a struct that simply has the file metadata, not the entire file
-fn get_list_of_files_for_updating() -> Vec<RemoteFileMetadata> {
+fn get_list_of_files_for_updating() -> Vec<FileMetadata> {
     let mut files = Vec::new();
     let path = PathBuf::from("./client/example_dir");
     let file_paths = common::file_utils::get_all_files_from_path(&path).unwrap();
 
     for path in file_paths {
-        let file = RemoteFileMetadata::new(path, "example_dir".to_string(), 0);
+        let file = FileMetadata::new(path, "example_dir".to_string(), 0);
         files.push(file);
     }
     files

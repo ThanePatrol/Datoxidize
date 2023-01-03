@@ -1,7 +1,9 @@
 use std::{fs};
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs::File;
 use std::path::{PathBuf};
-use std::time::{SystemTime};
+use std::time::{SystemTime, UNIX_EPOCH};
 use filetime::FileTime;
 pub use serde::{Deserialize, Serialize};
 use crate::config_utils::{DirectoryConfig, VaultConfig};
@@ -44,25 +46,61 @@ impl RemoteFile {
     }
 }
 
-/// Metadata tuple format: (access_time, modified_time, file_size_bytes)
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MetadataBlob {
+    pub vaults: HashMap<i32, VaultMetadata>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VaultMetadata {
+    pub files: Vec<FileMetadata>,
+    pub vault_id: i32,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RemoteFileMetadata {
+pub struct FileMetadata {
     pub full_path: PathBuf,
     pub root_directory: String,
-    pub metadata: (SystemTime, SystemTime, u64),
+    pub modified_time: i64,
+    pub file_size: i64,
     pub vault_id: i32,
     pub file_id: i32,
 }
 
-impl RemoteFileMetadata {
-    pub fn new(path: PathBuf, root_dir: String, vault_id: i32) -> Self {
-        let metadata = fs::metadata(path.clone()).unwrap();
-        RemoteFileMetadata {
-            full_path: path,
+impl FileMetadata {
+    pub fn new_from_server(
+        file_id: i32,
+        vault_id: i32,
+        file_path: PathBuf,
+        root_dir: String,
+        mod_time: i64,
+        file_size: i64,
+    ) -> Self {
+        FileMetadata {
+            full_path: file_path,
             root_directory: root_dir,
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
+            modified_time: mod_time,
+            file_size,
             vault_id,
-            file_id: -1,
+            file_id,
+        }
+    }
+
+    pub fn new_from_client(
+        full_path: PathBuf,
+        root_directory: String,
+        modified_time: i64,
+        file_size: i64,
+        vault_id: i32,
+        file_id: i32,
+    ) -> Self {
+        FileMetadata {
+            full_path,
+            root_directory,
+            modified_time,
+            file_size,
+            vault_id,
+            file_id,
         }
     }
 }
@@ -70,12 +108,10 @@ impl RemoteFileMetadata {
 /// Returns a tuple of Vecs, the 0th item contains the vec of files that are more recent on client
 /// The 1st item contains a vec of files that are more recent on the server
 pub fn get_list_of_newer_files(
-    client: &Vec<RemoteFileMetadata>,
-    server: &Vec<RemoteFileMetadata>) -> (Vec<RemoteFileMetadata>, Vec<RemoteFileMetadata>) {
-
+    client: &Vec<FileMetadata>,
+    server: &Vec<FileMetadata>) -> (Vec<FileMetadata>, Vec<FileMetadata>) {
     let mut client_new = Vec::new();
     let mut server_new = Vec::new();
-
 
 
     (client_new, server_new)
@@ -107,10 +143,10 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
 
 pub async fn copy_file_to_local(server_file: &RemoteFile,
                                 directory_config: &DirectoryConfig)
-    -> Result<(), Box<dyn Error>> {
-
+                                -> Result<(), Box<dyn Error>> {
     Ok(())
 }
+
 
 //todo - implement diff_copy to only sync differences
 /// saves the file to the server, if the directory is not present, create it
@@ -130,6 +166,7 @@ pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultC
     Ok(())
 }
 
+/// Convenience function to read all files in all subdirs of a supplied path
 pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
     fn recursive_walk(path: &PathBuf, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
         for entry in fs::read_dir(path)? {
@@ -149,18 +186,27 @@ pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> 
     Ok(files)
 }
 
-pub fn get_all_file_metadata(path: &PathBuf, vault_config: &VaultConfig) -> Vec<RemoteFileMetadata> {
-    let file_paths = get_all_files_from_path(path)
-        .expect(&*format!("Error reading path: {}", path.display()));
+/// Test function for getting metadata populated from a particular path
+pub fn get_file_metadata_from_path_client(paths: Vec<PathBuf>) -> Vec<FileMetadata> {
+    let mut files = Vec::new();
 
-    let mut files = Vec::with_capacity(file_paths.len());
-
-    for file_path in file_paths {
-        let file = RemoteFileMetadata::new(
-            file_path.clone(),
-            vault_config.vault_root.clone(),
-            vault_config.vault_id);
-        files.push(file)
+    for path in paths {
+        let vault_id = 0;
+        let file_path = path.clone();
+        let root_directory = "example_dir".to_string();
+        let modified_time = fs::metadata(&path).unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let file_size = fs::metadata(&path).unwrap().len() as i64;
+        let file = FileMetadata {
+            full_path: file_path,
+            root_directory,
+            modified_time,
+            file_size,
+            vault_id,
+            file_id: -1,
+        };
+        files.push(file);
     }
+
     files
 }
+

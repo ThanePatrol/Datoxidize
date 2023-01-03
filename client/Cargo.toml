@@ -26,6 +26,8 @@ serial_test = "0.10.0"
 reqwest = { version = "0.11.13", features = ["json"] }
 common = { path = "../common" }
 backend = {path = "../backend" }
+sqlx = { version = "0.6.2", features = [ "runtime-tokio-rustls", "sqlite"]}
+
 
 [dev-dependencies]
 axum-test-helper = "0.2.0"

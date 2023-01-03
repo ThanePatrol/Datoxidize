@@ -2,6 +2,7 @@ mod html_creation;
 mod sync_core;
 mod db_api;
 
+use std::error::Error;
 use std::fs;
 use axum::{
     routing::{get, post},
@@ -15,16 +16,21 @@ use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
 use common::{RemoteFile};
-use common::file_utils::RemoteFileMetadata;
+use common::file_utils::FileMetadata;
 use sync_core::sync_file_with_server;
-use crate::db_api::init_client_sync;
+use crate::db_api::{get_metadata_blob};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     //init environment variables
     dotenvy::from_path("./backend/.env").unwrap();
-    let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await.unwrap();
 
+    //init db
+    let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await?;
+
+    //todo where i got up to: Test out the get_metadata_blob to check file syncing and db access from client
+
+    //db_api::add_files_to_db(&pool).await?;
     //let file = fs::read("./templates/directory.html").unwrap();
 
     tracing_subscriber::fmt::init();
@@ -38,7 +44,8 @@ async fn main() {
 
     axum::Server::bind(&addr)
         .serve(router.into_make_service())
-        .await.unwrap();
+        .await?;
+    Ok(())
 }
 
 fn router(pool: Pool<Sqlite>) -> Router {
@@ -51,17 +58,12 @@ fn router(pool: Pool<Sqlite>) -> Router {
         .route("/show_dirs", get(get_directories))
         // POST /copy takes a JSON form of a file and copies it to the server
         .route("/copy", post(copy_file))
-        //POST /copy/init takes JSON RemoteFileMetadata and responds with various HTTP codes depending on what needs to be done next
-        .route("/copy/init", post(init_sync))
+        // GET /copy/metadatablob gets the files as a metadata blob struct as json to assist with init syncing
+        .route("/copy/metadata_blob", get(get_metadata_blob))
 
         .with_state(pool)
 }
 
-async fn init_sync(State(pool): State<Pool<Sqlite>>, Json(payload): Json<Vec<Vec<RemoteFileMetadata>>>) -> impl IntoResponse {
-    println!("hit init_sync");
-    let code = init_client_sync(&pool, payload).await;
-    code
-}
 
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
