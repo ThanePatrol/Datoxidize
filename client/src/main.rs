@@ -15,9 +15,9 @@ use common::config_utils::{deserialize_config};
 async fn main() -> Result<()> {
 
     dotenvy::from_path("./client/.env").unwrap();
-    //let pool = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
+    let pool = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
 
-
+    /*
     let path = PathBuf::from("./client/test_resources/config.json");
 
     let dir_map = deserialize_config(&path).unwrap();
@@ -26,10 +26,13 @@ async fn main() -> Result<()> {
     let watched_dir = &dir_settings.content_directory.clone();
     let frequency = dir_settings.sync_frequency.clone();
 
+     */
+
+
     //todo - store remote url in config
     let url = reqwest::Url::parse("http://localhost:3000").unwrap();
     println!("calling init sync");
-    http_sync::init_sync(url).await.unwrap();
+    http_sync::init_sync(url, &pool).await.unwrap();
 
     println!("here");
 

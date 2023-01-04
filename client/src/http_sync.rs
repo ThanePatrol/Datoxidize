@@ -5,22 +5,42 @@ use axum::http;
 use common::RemoteFile;
 use http::StatusCode;
 use reqwest::{Client, Url};
+use sqlx::{Pool, Sqlite};
 use common::config_utils::{DirectoryConfig, VaultConfig};
 use common::file_utils::{MetadataBlob, FileMetadata};
+use crate::client_db_api::load_file_metadata;
 
 /// Main api that is called on launch of client
 /// Will make request to server for a list of all files and their metadata
 /// Once received, go through the list of files, if there is something more recent on server
 /// It makes a request for that file, if the file is more recent on the client, send it to server
-pub async fn init_sync(url: Url) -> Result<(), Box<dyn Error>> {
+pub async fn init_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
 
     let client = Client::new();
-    let mut endpoint = url.clone();
-    endpoint.set_path("/copy/metadata_blob");
-    let server_metadata = get_metadata_from_server(&client, endpoint).await;
-    println!("metadata blo=b: {:?}", server_metadata);
+
+    let get_metadata_url = get_metadata_url(&url);
+    let server_metadata = get_metadata_from_server(&client, get_metadata_url).await;
+
+
+    let post_metadata_url = post_metadata_url(&url);
+    let local_metadata = load_file_metadata(pool).await?;
+
+
+    println!("metadata blob: {:?}", server_metadata);
 
     Ok(())
+}
+
+fn get_metadata_url(parent_url: &Url) -> Url {
+    let mut endpoint = parent_url.clone();
+    endpoint.set_path("/copy/metadata_blob_send");
+    endpoint
+}
+
+fn post_metadata_url(parent_url: &Url) -> Url {
+    let mut endpoint = parent_url.clone();
+    endpoint.set_path("/copy/metadata_blob_receive");
+    endpoint
 }
 
 /// Gets the every file and its update time from server
@@ -32,6 +52,13 @@ async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
         .json()
         .await.unwrap()
 }
+
+async fn get_local_metadata_blob() -> MetadataBlob {
+    load_file_metadata()
+}
+
+
+
 /*
 async fn send_init_list_of_local_files() -> StatusCode {
     let local_files = vec![get_list_of_files_for_updating()];
@@ -47,17 +74,6 @@ async fn send_init_list_of_local_files() -> StatusCode {
 }
 
  */
-
-async fn get_remote_config(url: &Url) -> Result<HashMap<i32, VaultConfig>, Box<dyn Error>> {
-    let mut config_url = url.clone();
-    config_url.set_path("config/all");
-
-    let config = reqwest::get(config_url)
-        .await?
-        .json::<HashMap<i32, VaultConfig>>()
-        .await?;
-    Ok(config)
-}
 
 /*
 async fn sync_remote_files_to_local(files: Vec<RemoteFile>) {}

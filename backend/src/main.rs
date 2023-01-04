@@ -58,8 +58,10 @@ fn router(pool: Pool<Sqlite>) -> Router {
         .route("/show_dirs", get(get_directories))
         // POST /copy takes a JSON form of a file and copies it to the server
         .route("/copy", post(copy_file))
-        // GET /copy/metadatablob gets the files as a metadata blob struct as json to assist with init syncing
-        .route("/copy/metadata_blob", get(get_metadata_blob))
+        // GET /copy/metadata_blob_send gets the files as a metadata blob struct as json and sends to client
+        .route("/copy/metadata_blob_send", get(get_metadata_blob))
+        //POST /copy/metadata_blob_receive receives the files as a metadata blob from client, this is part of the initial handshake
+        .route("/copy/metadata_blob_receive", post())
 
         .with_state(pool)
 }

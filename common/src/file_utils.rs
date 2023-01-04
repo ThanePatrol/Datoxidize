@@ -1,12 +1,11 @@
 use std::{fs};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::File;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use filetime::FileTime;
 pub use serde::{Deserialize, Serialize};
-use crate::config_utils::{DirectoryConfig, VaultConfig};
+use crate::config_utils::{VaultConfig};
 
 //todo - add file_id
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
@@ -52,9 +51,47 @@ pub struct MetadataBlob {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct MetadataDiff {
+    pub new_for_server: HashMap<i32, VaultMetadata>,
+    pub new_for_client: HashMap<i32, VaultMetadata>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VaultMetadata {
     pub files: Vec<FileMetadata>,
     pub vault_id: i32,
+}
+
+impl VaultMetadata {
+    /// Returns a new VaultMetadata tuple, 0 idx is new for client, 1st is new for server
+    pub fn get_differences_from_server(&self, server: &VaultMetadata) -> (VaultMetadata, VaultMetadata) {
+        let mut new_for_client = VaultMetadata {
+            files: vec![],
+            vault_id: server.vault_id,
+        };
+
+        let mut new_for_server = VaultMetadata {
+            files: vec![],
+            vault_id: server.vault_id,
+        };
+
+        for client_file in self.files.iter() {
+            // if file_id is -1 then file is not present on server
+            if client_file.file_id == -1 {
+                new_for_server.files.push(client_file.clone());
+                continue;
+            }
+
+            for server_file in server.files.iter() {
+                if client_file.compare_to(&server_file) == 1 { // is client file newer than server file
+                    new_for_server.files.push(client_file.clone());
+                } else if client_file.compare_to(&server_file) == -1 { //is server file newer than client file
+                    new_for_client.files.push(server_file.clone())
+                }
+            }
+        }
+        (new_for_client, new_for_server)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -103,18 +140,39 @@ impl FileMetadata {
             file_id,
         }
     }
+
+    /// Returns 1 if the calling struct is newer than the other struct
+    /// Returns -1 if the calling struct is older than the other struct
+    /// 0 if equal
+    pub fn compare_to(&self, other: &FileMetadata) -> i32 {
+        if self.modified_time > other.modified_time { return 1; }
+        if self.modified_time < other.modified_time { return -1; }
+        0
+    }
 }
 
-/// Returns a tuple of Vecs, the 0th item contains the vec of files that are more recent on client
-/// The 1st item contains a vec of files that are more recent on the server
-pub fn get_list_of_newer_files(
-    client: &Vec<FileMetadata>,
-    server: &Vec<FileMetadata>) -> (Vec<FileMetadata>, Vec<FileMetadata>) {
-    let mut client_new = Vec::new();
-    let mut server_new = Vec::new();
+/// Sorts through all files, finds the newest files for both client and server and
+/// returns it in a MetadataDiff struct
+/// As the client will most likely have less vaults than the server, iterate through the client vaults
+pub fn get_metadata_diff(
+    client: MetadataBlob,
+    server: MetadataBlob) -> MetadataDiff {
 
+    let mut metadata_diff = MetadataDiff {
+        new_for_server: HashMap::new(),
+        new_for_client: HashMap::new(),
+    };
 
-    (client_new, server_new)
+    let client_vaults = client.vaults;
+    for client_vault in client_vaults.into_iter() {
+        let vault_id = client_vault.0;
+        let server_vault = server.vaults.get(&vault_id).unwrap();
+        let differences = client_vault.1.get_differences_from_server(server_vault);
+        metadata_diff.new_for_client.insert(vault_id, differences.0);
+        metadata_diff.new_for_server.insert(vault_id, differences.1);
+    }
+
+    metadata_diff
 }
 
 
@@ -140,13 +198,6 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
 
     PathBuf::from(path)
 }
-
-pub async fn copy_file_to_local(server_file: &RemoteFile,
-                                directory_config: &DirectoryConfig)
-                                -> Result<(), Box<dyn Error>> {
-    Ok(())
-}
-
 
 //todo - implement diff_copy to only sync differences
 /// saves the file to the server, if the directory is not present, create it
