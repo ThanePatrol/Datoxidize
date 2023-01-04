@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     //todo - store remote url in config
     let url = reqwest::Url::parse("http://localhost:3000").unwrap();
     println!("calling init sync");
-    http_sync::init_sync(url).await?;
+    http_sync::init_sync(url).await.unwrap();
 
     println!("here");
 

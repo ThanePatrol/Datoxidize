@@ -17,22 +17,22 @@ pub async fn init_sync(url: Url) -> Result<(), Box<dyn Error>> {
     let client = Client::new();
     let mut endpoint = url.clone();
     endpoint.set_path("/copy/metadata_blob");
-    let server_metadata = get_metadata_from_server(&client, endpoint).await?;
+    let server_metadata = get_metadata_from_server(&client, endpoint).await;
     println!("metadata blo=b: {:?}", server_metadata);
 
     Ok(())
 }
 
 /// Gets the every file and its update time from server
-async fn get_metadata_from_server(client: &Client, url: Url) -> Result<MetadataBlob, Box<dyn Error>> {
+async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
     client
         .get(url)
         .send()
-        .await?
+        .await.unwrap()
         .json()
-        .await?
+        .await.unwrap()
 }
-
+/*
 async fn send_init_list_of_local_files() -> StatusCode {
     let local_files = vec![get_list_of_files_for_updating()];
     println!("size of vec: {}", local_files.len());
@@ -46,6 +46,8 @@ async fn send_init_list_of_local_files() -> StatusCode {
         .status()
 }
 
+ */
+
 async fn get_remote_config(url: &Url) -> Result<HashMap<i32, VaultConfig>, Box<dyn Error>> {
     let mut config_url = url.clone();
     config_url.set_path("config/all");
@@ -57,6 +59,7 @@ async fn get_remote_config(url: &Url) -> Result<HashMap<i32, VaultConfig>, Box<d
     Ok(config)
 }
 
+/*
 async fn sync_remote_files_to_local(files: Vec<RemoteFile>) {}
 
 async fn send_local_files_to_remote() -> StatusCode {
@@ -78,6 +81,9 @@ async fn send_local_files_to_remote() -> StatusCode {
     status
 }
 
+ */
+
+/*
 //todo - make a struct that simply has the file metadata, not the entire file
 fn get_list_of_files_for_updating() -> Vec<FileMetadata> {
     let mut files = Vec::new();
@@ -90,4 +96,6 @@ fn get_list_of_files_for_updating() -> Vec<FileMetadata> {
     }
     files
 }
+
+ */
 
