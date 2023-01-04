@@ -4,6 +4,7 @@ use std::error::Error;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use filetime::FileTime;
+use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator};
 pub use serde::{Deserialize, Serialize};
 use crate::config_utils::{VaultConfig};
 
@@ -151,6 +152,8 @@ impl FileMetadata {
     }
 }
 
+impl
+
 /// Sorts through all files, finds the newest files for both client and server and
 /// returns it in a MetadataDiff struct
 /// As the client will most likely have less vaults than the server, iterate through the client vaults
@@ -259,5 +262,19 @@ pub fn get_file_metadata_from_path_client(paths: Vec<PathBuf>) -> Vec<FileMetada
     }
 
     files
+}
+
+pub fn update_list_of_file_metadata(files: &mut Vec<FileMetadata>) {
+    files.par_mut_iter().for_each(|file| update_file_metadata(file));
+}
+
+/// Used for updating a the metadata of a file. Useful for the initial startup of a client and/or server
+/// Takes a mutable reference and modifies the values of the
+fn update_file_metadata(file: &mut FileMetadata) {
+    let metadata = fs::metadata(&file.full_path)
+        .expect(&*format!("Error reading metadata from {:?}", file.full_path));
+
+    file.modified_time = metadata.modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    file.file_size = metadata.len() as i64;
 }
 

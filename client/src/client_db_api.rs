@@ -70,5 +70,3 @@ fn build_file_metadata_for_vault(vault: i32, rows: Vec<SqliteRow>) -> Vec<FileMe
     files
 }
 
-/// Used as a helper function to init the DB
-fn read_all_local_file_metadata

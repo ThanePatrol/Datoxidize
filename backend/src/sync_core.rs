@@ -2,9 +2,42 @@ use std::collections::HashMap;
 use std::{fs};
 use std::path::{Path, PathBuf};
 use once_cell::sync::Lazy;
-use common::file_utils::{copy_file_to_server, get_server_path};
-use common::RemoteFile;
+use common::file_utils::{copy_file_to_server, FileMetadata, get_server_path, MetadataBlob, VaultMetadata};
+use common::{file_utils, RemoteFile};
 use common::config_utils::{deserialize_vault_config, VaultConfig};
+
+
+/// Used as a helper function to init the DB - ensure that all files in directories declared as vaults
+/// have been read and the database has up to date metadata on initial startup
+/// accepts a hashmap as param => key of vault id, value of vector of file paths.
+/// Then reads from the file_system and returns a MetadataBlob to be added to the DB
+fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> MetadataBlob {
+    let mut blob = MetadataBlob {
+        vaults: HashMap::new(),
+    };
+
+    //todo - where i got up to: Populate the DB with updated file metadata on client launch
+    // once loaded, start back and forward communication with server
+    for mut vault in vaults {
+
+        file_utils::update_list_of_file_metadata(&mut vault.1);
+
+
+    }
+
+    blob
+}
+
+
+/*-----------------------------OLD STUFF BELOW-----------------------------------------*/
+
+
+
+
+
+
+
+
 
 static VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
         deserialize_vault_config()
