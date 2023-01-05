@@ -18,7 +18,7 @@ use sqlx::{Pool, Sqlite};
 use common::{RemoteFile};
 use common::file_utils::FileMetadata;
 use sync_core::sync_file_with_server;
-use crate::db_api::{get_metadata_blob};
+use crate::db_api::{get_metadata_blob, get_metadata_differences};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -61,7 +61,7 @@ fn router(pool: Pool<Sqlite>) -> Router {
         // GET /copy/metadata_blob_send gets the files as a metadata blob struct as json and sends to client
         .route("/copy/metadata_blob_send", get(get_metadata_blob))
         //POST /copy/metadata_blob_receive receives the files as a metadata blob from client, this is part of the initial handshake
-        .route("/copy/metadata_blob_receive", post())
+        .route("/copy/metadata_blob_receive", post(get_metadata_differences))
 
         .with_state(pool)
 }

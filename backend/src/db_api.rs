@@ -9,7 +9,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use sqlx::{Pool, Row, Sqlite, SqlitePool};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
-use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata, get_all_files_from_path};
+use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata};
 use common::{file_utils, RemoteFile};
 
 /// Main database tables on the server are:
@@ -62,31 +62,67 @@ pub async fn init_db(db_url: String) -> Result<Pool<Sqlite>, Box<dyn Error>> {
     Ok(pool)
 }
 
-pub async fn get_metadata_blob(
-    State(pool): State<Pool<Sqlite>>)
-    -> impl IntoResponse {
-
-    let metadata = build_metadata_blob(&pool).await.unwrap();
-    Json(metadata)
+/// Sends metadata blob to client when request by a GET request
+/// Reads from DB and maps file metadata to build a structure to be sent via TCP
+/// Intended for help in the initial sync of client and server
+pub async fn get_metadata_blob(State(pool): State<Pool<Sqlite>>) -> impl IntoResponse {
+    let blob = build_metadata_blob(&pool)
+        .await
+        .expect(&*format!("Error reading metadata blob"));
+    Json(blob)
 }
 
-//todo change this method to work with different vault numbers
+pub async fn get_metadata_differences(
+    State(pool): State<Pool<Sqlite>>,
+    Json(client_blob): Json<MetadataBlob>,
+) -> impl IntoResponse {
+
+    let server_blob = build_metadata_blob(&pool)
+        .await
+        .expect("Error creating server MetadataBlob");
+
+    let difference = file_utils::get_metadata_diff(client_blob, server_blob);
+    println!("metadata difference {:?}", difference);
+    StatusCode::OK
+}
+
+/// Helper function that queries DB and returns a blob of Metadata
 async fn build_metadata_blob(pool: &Pool<Sqlite>) -> Result<MetadataBlob, sqlx::Error> {
-    let query: Vec<SqliteRow> = sqlx::query("select * from file_metadata where vault_id == 0;")
+    let vault_query = sqlx::query("select vault_id from vaults")
         .fetch_all(pool)
         .await?;
 
-    let files = map_metadata_query_to_blob(query);
-    let vault_md = VaultMetadata {
-        files,
-        vault_id: 0,
+    let vaults = vault_query
+        .iter()
+        .map(|row| row.get::<i32, _>(0))
+        .collect::<Vec<i32>>();
+
+    let mut blob = MetadataBlob {
+        vaults: HashMap::new(),
     };
-    let blob = MetadataBlob {
-        vaults: HashMap::from([(0, vault_md)]),
-    };
+
+    println!("vaults: {:?}", vaults);
+
+    for vault in vaults {
+        let query: Vec<SqliteRow> = sqlx::query("select * from file_metadata where vault_id == ? ;")
+            .bind(vault)
+            .fetch_all(pool)
+            .await?;
+
+        let files = map_metadata_query_to_blob(query);
+        println!("files: {:?}", files);
+
+        let vault_md = VaultMetadata {
+            files,
+            vault_id: vault,
+        };
+        blob.vaults.insert(vault, vault_md);
+    }
+
     Ok(blob)
 }
 
+/// A helper method to abstract away the ugly code required to map the rows of data to a vector
 fn map_metadata_query_to_blob(rows: Vec<SqliteRow>) -> Vec<FileMetadata> {
     let mut result = Vec::new();
     rows
@@ -116,7 +152,7 @@ fn map_metadata_query_to_blob(rows: Vec<SqliteRow>) -> Vec<FileMetadata> {
 pub async fn add_files_to_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     let path = PathBuf::from("./backend/storage/vault0/example_dir");
     let paths = file_utils::get_all_files_from_path(&path).unwrap();
-    let files = file_utils::get_file_metadata_from_path_client(paths.clone());
+    let files = file_utils::test_get_file_metadata_from_path_client(paths.clone());
 
     println!("files to add:  {:?}", paths);
     for file in files {
@@ -132,14 +168,3 @@ pub async fn add_files_to_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Sorts by metadata access time - most recent metadata comes first
-fn sort_files_by_modified_time(files: &mut Vec<Vec<FileMetadata>>) {
-    /*
-    for vault in files {
-        vault.sort_by(|a, b| {
-            b.metadata.1.cmp(&a.metadata.1)
-        });
-    }
-
-     */
-}

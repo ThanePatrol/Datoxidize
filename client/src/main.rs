@@ -1,22 +1,31 @@
+extern crate core;
+
 mod old_sync_logic;
 mod http_sync;
 mod client_db_api;
 
+use std::alloc::System;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time;
+use fs_extra::dir::DirEntryValue::SystemTime;
 use notify::*;
 use crate::old_sync_logic::{create_folder_on_remote, sync_changed_file};
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
 use tokio::sync::futures;
 use common::config_utils::{deserialize_config};
+use crate::http_sync::send_metadata_to_server;
 
 #[tokio::main]
 async fn main() -> Result<()> {
 
     dotenvy::from_path("./client/.env").unwrap();
+    let start = time::SystemTime::now();
     let pool = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
-
+    let end = time::SystemTime::now();
+    let time = end.duration_since(start).unwrap();
+    println!("time taken for db load : {:?}", time.as_millis());
     /*
     let path = PathBuf::from("./client/test_resources/config.json");
 
@@ -29,10 +38,13 @@ async fn main() -> Result<()> {
      */
 
 
-    //todo - store remote url in config
+    //todo - store remote url in .env file
     let url = reqwest::Url::parse("http://localhost:3000").unwrap();
     println!("calling init sync");
-    http_sync::init_sync(url, &pool).await.unwrap();
+    let files = http_sync::init_sync(url, &pool).await.unwrap();
+    /// send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
+    send_metadata_to_server(&files.0, files.1, files.2).await;
+
 
     println!("here");
 

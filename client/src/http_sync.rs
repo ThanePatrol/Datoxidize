@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::{Arc};
+use tokio::sync::Barrier;
 use axum::http;
 use common::RemoteFile;
 use http::StatusCode;
@@ -14,7 +16,7 @@ use crate::client_db_api::load_file_metadata;
 /// Will make request to server for a list of all files and their metadata
 /// Once received, go through the list of files, if there is something more recent on server
 /// It makes a request for that file, if the file is more recent on the client, send it to server
-pub async fn init_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+pub async fn init_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(Client, Url, MetadataBlob), sqlx::Error> {
 
     let client = Client::new();
 
@@ -24,11 +26,11 @@ pub async fn init_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sqlx::Error>
 
     let post_metadata_url = post_metadata_url(&url);
     let local_metadata = load_file_metadata(pool).await?;
-
+    println!("Ready to send");
 
     println!("metadata blob: {:?}", server_metadata);
 
-    Ok(())
+    Ok((client, post_metadata_url, local_metadata))
 }
 
 fn get_metadata_url(parent_url: &Url) -> Url {
@@ -43,6 +45,15 @@ fn post_metadata_url(parent_url: &Url) -> Url {
     endpoint
 }
 
+pub async fn send_metadata_to_server(client: &Client, url: Url, blob: MetadataBlob) {
+    client.
+        post(url)
+        .json(&blob)
+        .send()
+        .await
+        .unwrap();
+}
+
 /// Gets the every file and its update time from server
 async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
     client
@@ -53,9 +64,6 @@ async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
         .await.unwrap()
 }
 
-async fn get_local_metadata_blob() -> MetadataBlob {
-    load_file_metadata()
-}
 
 
 
