@@ -26,16 +26,10 @@ async fn main() -> Result<()> {
     let end = time::SystemTime::now();
     let time = end.duration_since(start).unwrap();
     println!("time taken for db load : {:?}", time.as_millis());
-    /*
-    let path = PathBuf::from("./client/test_resources/config.json");
 
-    let dir_map = deserialize_config(&path).unwrap();
-
-    let dir_settings = dir_map.get(&0).unwrap().clone();
-    let watched_dir = &dir_settings.content_directory.clone();
-    let frequency = dir_settings.sync_frequency.clone();
-
-     */
+    //todo where i got up to => ensure files are not added to the db multiple times, on both client and server
+    // determine why MetadataDiff new_for_client is not working
+    //
 
 
     //todo - store remote url in .env file
@@ -115,7 +109,7 @@ mod tests {
     fn router() -> Router {
         Router::new()
             //Show all files in storage dir
-            .route("/", get(common::router_utils::show_files))
+            .route("/", get(router_utils::show_files))
             //copy json to storage dir
             .route("/copy_to_server", post(copy_files))
     }
