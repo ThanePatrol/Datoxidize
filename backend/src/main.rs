@@ -15,7 +15,7 @@ use axum::extract::State;
 use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
-use common::{RemoteFile};
+use common::{db_utils, RemoteFile};
 use common::file_utils::FileMetadata;
 use sync_core::sync_file_with_server;
 use crate::db_api::{get_metadata_blob, get_metadata_differences};
@@ -27,9 +27,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     //init db
     let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await?;
-
-    //todo where i got up to: Test out the get_metadata_blob to check file syncing and db access from client
-
+    let pool2 = db_api::init_db(var("DATABASE_URL").unwrap()).await?;
+    tokio::task::spawn_blocking(move || {
+        db_utils::init_metadata_load_into_db(&pool2, true);
+    }).await.unwrap();
+    println!("loaded metadata into db");
     //db_api::add_files_to_db(&pool).await?;
     //let file = fs::read("./templates/directory.html").unwrap();
 
@@ -92,20 +94,22 @@ async fn get_synced_file() -> Json<Value> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io, path};
+    use std::{env, fs, io, path};
     use std::path::PathBuf;
     use super::*;
     use axum::http::StatusCode;
     use axum_test_helper::TestClient;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     #[tokio::test]
     async fn copy_file_via_http() {
-        let router = router();
+        let pool = test_db_init().await;
+        let router = router(pool);
         let client = TestClient::new(router);
         let path = PathBuf::from("../client/example_dir/test_file_http/lophostemon_occurrences.csv");
         fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
-        let file = common::RemoteFile::new(path, "example_dir".to_string(), 0);
+        let file = RemoteFile::new(path, "example_dir".to_string(), 0);
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -115,9 +119,21 @@ mod tests {
         remove_dir_contents("../client/example_dir/test_file_http").unwrap();
     }
 
+    async fn test_db_init() -> Pool<Sqlite> {
+        println!("dir: {:?}", env::current_dir());
+        dotenvy::from_path("./.env").unwrap();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect(dotenvy::var("TEST_DATABASE_URL").unwrap().as_str())
+            .await
+            .unwrap();
+        pool
+    }
+
     #[tokio::test]
     async fn copy_nested_file_via_http() {
-        let router = router();
+        let pool = test_db_init().await;
+        let router = router(pool);
         let client = TestClient::new(router);
         fs::create_dir_all("../client/example_dir/test_copy_nested_http/http_test/another").unwrap();
         let file_path = "../client/example_dir/test_copy_nested_http/http_test/another/test.csv";

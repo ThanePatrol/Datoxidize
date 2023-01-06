@@ -12,3 +12,5 @@ axum = "0.6.1"
 filetime = "0.2.19"
 dotenvy = "0.15.6"
 rayon = "1.6.1"
+sqlx = { version = "0.6.2", features = [ "runtime-tokio-rustls", "sqlite"]}
+tokio = { version = "1.22.0", features = ["full"] }

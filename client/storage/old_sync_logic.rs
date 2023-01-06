@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+/* use std::collections::{HashMap, HashSet};
 use std::fs::Metadata;
 use std::io::{Read, Write};
 use std::path::{PathBuf};
@@ -7,6 +7,8 @@ use notify::*;
 use serde::{Deserialize, Serialize};
 use common::config_utils::DirectoryConfig;
 
+
+ */
 /// root_directory specifies the directory for the syncing to occur, this should
 /// mirror the local dir exactly
 /// This will be mirrored locally and remote
@@ -14,7 +16,7 @@ use common::config_utils::DirectoryConfig;
 /// where directory_id is a unique i32
 /// Sync frequency is specified
 
-
+/*
 /// Public API that reads through directories and syncs files and directories
 pub fn initial_sync(directory: &DirectoryConfig) {
 
@@ -23,7 +25,6 @@ pub fn initial_sync(directory: &DirectoryConfig) {
 
 }
 
-//todo - create a method called get_full_local_path that takes a remote file and a config and gets an appropriate local file path - needed for bidirectional syncing
 fn init_sync_remote_to_local(config: &DirectoryConfig) {
     fn get_list_of_files_to_update_on_local(local_metadata: &Vec<(PathBuf, Metadata)>, remote_meta_data: &Vec<(PathBuf, Metadata)>) -> Vec<PathBuf> {
         let mut to_sync = Vec::new();
@@ -262,8 +263,6 @@ fn remove_path_approximate_from_config(relative_dir: &mut String) -> String {
 }
 
 
-
-//todo write tests for directory creation and deletion
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
@@ -554,14 +553,7 @@ mod tests {
         fs_extra::dir::remove("./copy_dir/dir1/example_dir/t").unwrap();
 
     }
-    /*
-    #[test]
-    fn test_newer_files_on_remote_are_not_overwritten() {
-        let config = deserialize_config("./test_resources/config.json".to_string()).unwrap();
-
-    }
-
-     */
-
     //todo - create tests with nested folders on local that are not present on remote. Are those folders created where appropriate
 }
+
+ */

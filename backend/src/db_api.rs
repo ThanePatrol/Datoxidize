@@ -10,7 +10,7 @@ use axum::routing::get;
 use sqlx::{Pool, Row, Sqlite, SqlitePool};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
 use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata};
-use common::{file_utils, RemoteFile};
+use common::{db_utils, file_utils, RemoteFile};
 
 /// Main database tables on the server are:
 /// 1. file_metadata
@@ -57,8 +57,7 @@ pub async fn init_db(db_url: String) -> Result<Pool<Sqlite>, Box<dyn Error>> {
         .connect(db_url.as_str())
         .await?;
 
-    //let mut files = get_all_files_on_server(&pool).await?;
-    //sort_files_by_modified_time(&mut files);
+
     Ok(pool)
 }
 

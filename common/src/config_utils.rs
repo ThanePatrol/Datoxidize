@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::fs;
+use std::{env, fs};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -19,6 +19,7 @@ pub struct VaultConfig {
 /// If called from the backend it will be looking for a directory of ./backend/resources/vault_config.json
 /// This allows for different test configs and production configs to be retrieved from the same address
 pub fn deserialize_vault_config() -> HashMap<i32, VaultConfig> {
+    println!("resource dir: {:?}", env::current_dir());
     let mut json = String::new();
     fs::File::open("./resources/vault_config.json")
         .expect(&*format!("Vault config not found at {:?}", std::env::current_dir().unwrap()))

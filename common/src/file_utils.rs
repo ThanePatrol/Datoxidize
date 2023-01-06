@@ -84,6 +84,7 @@ impl VaultMetadata {
             }
 
             for server_file in server.files.iter() {
+
                 if client_file.compare_to(&server_file) == 1 { // is client file newer than server file
                     new_for_server.files.push(client_file.clone());
                 } else if client_file.compare_to(&server_file) == -1 { //is server file newer than client file
@@ -91,6 +92,7 @@ impl VaultMetadata {
                 }
             }
         }
+
         (new_for_client, new_for_server)
     }
 
@@ -166,6 +168,7 @@ pub fn get_metadata_diff(
         new_for_server: HashMap::new(),
         new_for_client: HashMap::new(),
     };
+
 
     let client_vaults = client.vaults;
     for client_vault in client_vaults.into_iter() {
@@ -311,6 +314,7 @@ pub fn get_file_metadata_from_path_client(paths: Vec<(i32, PathBuf)>, root_dir: 
 
     files
 }
+
 
 
 /*---------------------------------------TO DELETE -------------------------------------*/
