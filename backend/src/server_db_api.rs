@@ -9,8 +9,8 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use sqlx::{Pool, Row, Sqlite, SqlitePool};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
-use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata};
-use common::{db_utils, file_utils, RemoteFile};
+use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata, ServerPresent};
+use common::{common_db_utils, file_utils, RemoteFile};
 
 /// Main database tables on the server are:
 /// 1. file_metadata
@@ -68,7 +68,20 @@ pub async fn get_metadata_blob(State(pool): State<Pool<Sqlite>>) -> impl IntoRes
     let blob = build_metadata_blob(&pool)
         .await
         .expect(&*format!("Error reading metadata blob"));
-    Json(blob)
+    let id = get_latest_file_id(&pool)
+        .await
+        .expect(&*format!("Error selecting max file_id"));
+    Json((id, blob))
+}
+
+/// Gets the most recent file_id from db to allow client to update file_ids
+/// NB it needs to be incremented before use
+async fn get_latest_file_id(pool: &Pool<Sqlite>) -> Result<i32, sqlx::Error> {
+    let result = sqlx::query("select file_id from file_metadata order by file_id desc limit 1")
+        .fetch_one(pool)
+        .await?;
+    let latest = result.get::<i32, _>(0);
+    Ok(latest)
 }
 
 pub async fn get_metadata_differences(
@@ -141,12 +154,14 @@ fn map_metadata_query_to_blob(rows: Vec<SqliteRow>) -> Vec<FileMetadata> {
                 file_size,
                 vault_id,
                 file_id,
+                present_on_server: ServerPresent::Yes,
             };
             result.push(file.clone());
         });
     result
 }
 
+/*
 /// Meant for testing, populate the db with some dummy data to use
 pub async fn add_files_to_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     let path = PathBuf::from("./backend/storage/vault0/example_dir");
@@ -166,4 +181,6 @@ pub async fn add_files_to_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     }
     Ok(())
 }
+
+ */
 

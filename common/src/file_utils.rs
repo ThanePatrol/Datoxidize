@@ -46,6 +46,13 @@ impl RemoteFile {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ServerPresent {
+    Yes,
+    No,
+    Unknown,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MetadataBlob {
     pub vaults: HashMap<i32, VaultMetadata>,
@@ -107,6 +114,7 @@ pub struct FileMetadata {
     pub file_size: i64,
     pub vault_id: i32,
     pub file_id: i32,
+    pub present_on_server: ServerPresent,
 }
 
 impl FileMetadata {
@@ -125,6 +133,7 @@ impl FileMetadata {
             file_size,
             vault_id,
             file_id,
+            present_on_server: ServerPresent::Yes,
         }
     }
 
@@ -143,6 +152,7 @@ impl FileMetadata {
             file_size,
             vault_id,
             file_id,
+            present_on_server: ServerPresent::Unknown,
         }
     }
 
@@ -244,6 +254,16 @@ pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> 
     Ok(files)
 }
 
+/// Convenience function to convert a MetadataBlob to a vector of FileMetadata
+pub fn convert_blob_to_vec_metadata(blob: &mut MetadataBlob) -> Vec<FileMetadata> {
+    let mut files = Vec::with_capacity(blob.vaults.len());
+
+    for (_, mut vault) in &mut blob.vaults {
+        files.append(&mut vault.files);
+    }
+
+    files
+}
 
 
 /// Used as a helper function to init the DB - ensure that all files in directories declared as vaults
@@ -285,7 +305,7 @@ fn update_file_metadata(file: &mut FileMetadata) {
 
 /// Takes a vec of path and file_id tuples, root_directory of vault and vault id
 /// then reads the file system and creates a Vec<FileMetadata> and returns it
-pub fn get_file_metadata_from_path_client(paths: Vec<(i32, PathBuf)>, root_dir: String, vault_id: i32) -> Vec<FileMetadata> {
+pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String, vault_id: i32) -> Vec<FileMetadata> {
     let mut files = Vec::new();
 
     for path in paths {
@@ -308,34 +328,10 @@ pub fn get_file_metadata_from_path_client(paths: Vec<(i32, PathBuf)>, root_dir: 
             file_size,
             vault_id,
             file_id: file_path.0,
-        };
-        files.push(file);
-    }
-
-    files
-}
-
-
-
-/*---------------------------------------TO DELETE -------------------------------------*/
-
-/// Test function for getting metadata populated from a particular path
-pub fn test_get_file_metadata_from_path_client(paths: Vec<PathBuf>) -> Vec<FileMetadata> {
-    let mut files = Vec::new();
-
-    for path in paths {
-        let vault_id = 0;
-        let file_path = path.clone();
-        let root_directory = "example_dir".to_string();
-        let modified_time = fs::metadata(&path).unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        let file_size = fs::metadata(&path).unwrap().len() as i64;
-        let file = FileMetadata {
-            full_path: file_path,
-            root_directory,
-            modified_time,
-            file_size,
-            vault_id,
-            file_id: -1,
+            present_on_server: match file_path.0 {
+                -1 => ServerPresent::No,
+                x => ServerPresent::Yes,
+            },
         };
         files.push(file);
     }

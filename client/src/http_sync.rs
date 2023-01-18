@@ -16,21 +16,20 @@ use crate::client_db_api::load_file_metadata;
 /// Will make request to server for a list of all files and their metadata
 /// Once received, go through the list of files, if there is something more recent on server
 /// It makes a request for that file, if the file is more recent on the client, send it to server
-pub async fn init_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(Client, Url, MetadataBlob), sqlx::Error> {
+pub async fn init_metadata_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(Client, Url, MetadataBlob, MetadataBlob, i32), sqlx::Error> {
 
     let client = Client::new();
 
     let get_metadata_url = get_metadata_url(&url);
-    let server_metadata = get_metadata_from_server(&client, get_metadata_url).await;
+    let (file_id, server_metadata) = get_metadata_from_server(&client, get_metadata_url).await;
 
 
     let post_metadata_url = post_metadata_url(&url);
-    let local_metadata = load_file_metadata(pool).await?;
-    println!("Ready to send");
+    let local_metadata = load_file_metadata(pool, file_id).await?;
 
-    println!("metadata blob: {:?}", server_metadata);
+    println!("metadata blob received from server: {:?}", server_metadata);
 
-    Ok((client, post_metadata_url, local_metadata))
+    Ok((client, post_metadata_url, local_metadata, server_metadata, file_id))
 }
 
 fn get_metadata_url(parent_url: &Url) -> Url {
@@ -55,7 +54,7 @@ pub async fn send_metadata_to_server(client: &Client, url: Url, blob: MetadataBl
 }
 
 /// Gets the every file and its update time from server
-async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
+async fn get_metadata_from_server(client: &Client, url: Url) -> (i32, MetadataBlob) {
     client
         .get(url)
         .send()
@@ -64,7 +63,15 @@ async fn get_metadata_from_server(client: &Client, url: Url) -> MetadataBlob {
         .await.unwrap()
 }
 
-
+pub async fn get_new_files_from_server(client: &Client, url: Url) -> Vec<RemoteFile> {
+    client
+        .get(url)
+        .send()
+        .await.unwrap()
+        .json()
+        .await
+        .unwrap()
+}
 
 
 /*

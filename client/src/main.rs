@@ -13,32 +13,52 @@ use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
 use tokio::sync::futures;
 use common::config_utils::{deserialize_config};
-use common::db_utils;
+use common::common_db_utils;
 use crate::http_sync::send_metadata_to_server;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
+    //init environment variables
     dotenvy::from_path("./client/.env").unwrap();
-    let start = time::SystemTime::now();
-    let pool = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
-    let pool2 = client_db_api::init_db(dotenvy::var("DATABASE_URL").unwrap()).await.unwrap();
+
+    /// Initial load of db - spawns two lots of pools, gives one to common_utils to read
+    /// local files and insert/update database accordingly
+    /// second pool is used for general communication between client and db
+    let pool = client_db_api::init_db(
+        dotenvy::var("DATABASE_URL")
+            .unwrap())
+        .await
+        .unwrap();
+    let pool2 = client_db_api::init_db(
+        dotenvy::var("DATABASE_URL")
+            .unwrap())
+        .await
+        .unwrap();
     tokio::task::spawn_blocking(move || {
-        db_utils::init_metadata_load_into_db(&pool2, false);
-    }).await.unwrap();
-    let end = time::SystemTime::now();
-    let time = end.duration_since(start).unwrap();
-    println!("time taken for db load : {:?}", time.as_millis());
+        common_db_utils::init_metadata_load_into_db(&pool2, false);
+    })
+        .await
+        .unwrap();
 
-    //todo where i got up to => ensure files are not added to the db multiple times, on both client and server
-    // determine why MetadataDiff new_for_client is not working
+    let url = reqwest::Url::parse(
+        &*dotenvy::var("LOCAL_HOST")
+            .unwrap())
+        .unwrap();
 
+    /// Does initial communication with server, client and url is returned for later reuse
+    /// local_metadata is read from db, server_data is retrieved from server
+    /// file_id is the latest key from the servers db, used to update local files
+    /// that do not exist on server
+    let (client, url, local_data, mut server_data, file_id) =
+        http_sync::init_metadata_sync(url, &pool).await.unwrap();
 
-    //todo - store remote url in .env file
-    let url = reqwest::Url::parse("http://localhost:3000").unwrap();
-    let files = http_sync::init_sync(url, &pool).await.unwrap();
     /// send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
-    send_metadata_to_server(&files.0, files.1, files.2).await;
+    send_metadata_to_server(&client, url, local_data).await;
+
+    //todo - metadata diffing on client to ensure only new files are being inserted
+    client_db_api::insert_server_metadata_into_client_db(&pool, &mut server_data).await.unwrap();
+
+
 
 
     println!("here");

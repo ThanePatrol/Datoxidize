@@ -20,14 +20,13 @@ pub async fn init_metadata_load_into_db(pool: &Pool<Sqlite>, is_server: bool) ->
     for vault in vaults {
         let paths = file_utils::get_all_files_from_path(&vault.1)
             .expect(&*format!("Could not find paths: {:?}", vault.1));
-        println!("{:?}", paths);
+        println!("paths in init_metadata_load_into_db: {:?}", paths);
 
         remove_old_entries_from_db(pool, &paths).await?;
 
         let path_with_id = assign_file_ids(pool, paths, is_server).await?;
 
-        let file_metadata = file_utils::get_file_metadata_from_path_client(path_with_id, vault.2, vault.0);
-
+        let file_metadata = file_utils::get_file_metadata_from_path(path_with_id, vault.2, vault.0);
 
         upsert_database(pool, file_metadata).await?;
     }
@@ -37,9 +36,9 @@ pub async fn init_metadata_load_into_db(pool: &Pool<Sqlite>, is_server: bool) ->
 
 /// Does an update/insert on the database, insert files or update them if already exists
 /// This is intended for initial DB load
-async fn upsert_database(pool: &Pool<Sqlite>, files: Vec<FileMetadata>) -> Result<(), sqlx::Error> {
+pub async fn upsert_database(pool: &Pool<Sqlite>, files: Vec<FileMetadata>) -> Result<(), sqlx::Error> {
     for file in files {
-        println!("executing insert for: {:?}", file);
+        println!("executing upsert for: {:?}", file);
 
         sqlx::query(
             "INSERT OR IGNORE INTO file_metadata (file_id, vault_id, file_path, root_directory, modified_time, file_size)\

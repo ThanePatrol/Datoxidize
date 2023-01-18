@@ -1,6 +1,6 @@
 mod html_creation;
 mod sync_core;
-mod db_api;
+mod server_db_api;
 
 use std::error::Error;
 use std::fs;
@@ -15,22 +15,34 @@ use axum::extract::State;
 use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
-use common::{db_utils, RemoteFile};
+use common::{common_db_utils, RemoteFile};
 use common::file_utils::FileMetadata;
 use sync_core::sync_file_with_server;
-use crate::db_api::{get_metadata_blob, get_metadata_differences};
+use crate::server_db_api::{get_metadata_blob, get_metadata_differences};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     //init environment variables
     dotenvy::from_path("./backend/.env").unwrap();
 
-    //init db
-    let pool = db_api::init_db(var("DATABASE_URL").unwrap()).await?;
-    let pool2 = db_api::init_db(var("DATABASE_URL").unwrap()).await?;
+    /// Initial load of db - spawns two lots of pools, gives one to common_utils to read
+    /// local files and insert/update database accordingly
+    /// second pool is used for general communication between client and db
+    let pool = server_db_api::init_db(
+        var("DATABASE_URL")
+            .unwrap())
+        .await?;
+    let pool2 = server_db_api::init_db(
+        var("DATABASE_URL")
+            .unwrap())
+        .await?;
     tokio::task::spawn_blocking(move || {
-        db_utils::init_metadata_load_into_db(&pool2, true);
-    }).await.unwrap();
+        common_db_utils::init_metadata_load_into_db(&pool2, true);
+    })
+        .await
+        .unwrap();
+
+
     println!("loaded metadata into db");
     //db_api::add_files_to_db(&pool).await?;
     //let file = fs::read("./templates/directory.html").unwrap();
