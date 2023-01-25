@@ -1,12 +1,39 @@
 use std::collections::HashMap;
 use std::{fs};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::UNIX_EPOCH;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::Json;
+use axum::response::IntoResponse;
+use fs_extra::dir::DirEntryValue::SystemTime;
 use once_cell::sync::Lazy;
-use common::file_utils::{copy_file_to_server, FileMetadata, get_server_path, MetadataBlob, VaultMetadata};
-use common::{file_utils, RemoteFile};
+use sqlx::{Pool, Sqlite};
+use tokio::sync::Mutex;
+use common::file_utils::{FileMetadata, get_server_path, MetadataBlob, VaultMetadata};
+use common::{common_db_utils, file_utils, RemoteFile};
 use common::config_utils::{deserialize_vault_config, VaultConfig};
+use crate::ApiState;
 
 
+pub async fn save_user_required_files(
+    State(state): State<Arc<Mutex<ApiState>>>,
+    Json(payload): Json<Vec<FileMetadata>>)
+-> impl IntoResponse {
+    state.lock().await.client_requested = payload;
+    StatusCode::OK
+}
+
+pub async fn get_remote_files_for_client(
+    State(state): State<Arc<Mutex<ApiState>>>,
+) -> impl IntoResponse {
+    let pool = &state.lock().await.pool;
+    let metadata = &state.lock().await.client_requested;
+    let files = common_db_utils::get_file_contents_from_metadata(pool, &metadata)
+        .await;
+
+}
 
 /*-----------------------------OLD STUFF BELOW-----------------------------------------*/
 
@@ -14,7 +41,7 @@ use common::config_utils::{deserialize_vault_config, VaultConfig};
 
 
 
-
+/*
 
 
 
@@ -34,11 +61,11 @@ pub fn is_client_more_recent_than_server(remote: &RemoteFile, local: &PathBuf) -
     let server_metadata = fs::metadata(local)
         .expect(&*format!("Error reading metadata from {:?}", local));
 
-    let client_time = remote.metadata.1;
+    //remote.metadata.1;
     let server_time = server_metadata.modified()
         .expect(mdata_err_msg);
 
-    client_time > server_time
+    UNIX_EPOCH > server_time
 }
 
 //todo - set metadata from local to payload
@@ -51,7 +78,7 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
     println!("Path: {}", server_file_path.display());
 
     if is_client_more_recent_than_server(&payload, &server_file_path) {
-        copy_file_to_server(&payload, &config).await.unwrap();
+        //copy_file_to_server(&payload, &config).await.unwrap();
         true
     } else {
         false
@@ -97,5 +124,6 @@ mod tests {
 
     }
 
+*/
 
-}
+

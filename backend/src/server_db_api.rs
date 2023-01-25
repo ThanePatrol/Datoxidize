@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -9,8 +10,10 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use sqlx::{Pool, Row, Sqlite, SqlitePool};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
+use tokio::sync::Mutex;
 use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata, ServerPresent};
 use common::{common_db_utils, file_utils, RemoteFile};
+use crate::ApiState;
 
 /// Main database tables on the server are:
 /// 1. file_metadata
@@ -64,11 +67,12 @@ pub async fn init_db(db_url: String) -> Result<Pool<Sqlite>, Box<dyn Error>> {
 /// Sends metadata blob to client when request by a GET request
 /// Reads from DB and maps file metadata to build a structure to be sent via TCP
 /// Intended for help in the initial sync of client and server
-pub async fn get_metadata_blob(State(pool): State<Pool<Sqlite>>) -> impl IntoResponse {
-    let blob = build_metadata_blob(&pool)
+pub async fn get_metadata_blob(State(state): State<Arc<Mutex<ApiState>>>) -> impl IntoResponse {
+    let pool = &state.lock().await.pool;
+    let blob = build_metadata_blob(pool)
         .await
         .expect(&*format!("Error reading metadata blob"));
-    let id = get_latest_file_id(&pool)
+    let id = get_latest_file_id(pool)
         .await
         .expect(&*format!("Error selecting max file_id"));
     Json((id, blob))
@@ -84,12 +88,24 @@ async fn get_latest_file_id(pool: &Pool<Sqlite>) -> Result<i32, sqlx::Error> {
     Ok(latest)
 }
 
-pub async fn get_metadata_differences(
-    State(pool): State<Pool<Sqlite>>,
+pub async fn insert_new_metadata_into_db(
+    State(state): State<Arc<Mutex<ApiState>>>,
     Json(client_blob): Json<MetadataBlob>,
 ) -> impl IntoResponse {
+    let pool = &state.lock().await.pool;
+    let files = client_blob.convert_to_metadata_vec();
+    common_db_utils::upsert_database(pool, files)
+        .await
+        .expect(&*format!("Error inserting vec of  \n into database"));
+    StatusCode::OK
+}
 
-    let server_blob = build_metadata_blob(&pool)
+pub async fn get_metadata_differences(
+    State(state): State<Arc<Mutex<ApiState>>>,
+    Json(client_blob): Json<MetadataBlob>,
+) -> impl IntoResponse {
+    let pool = &state.lock().await.pool;
+    let server_blob = build_metadata_blob(pool)
         .await
         .expect("Error creating server MetadataBlob");
 

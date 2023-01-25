@@ -1,7 +1,8 @@
+use std::fmt::format;
 use std::path::PathBuf;
 use sqlx::{Pool, Row, Sqlite};
 use sqlx::sqlite::SqliteRow;
-use crate::file_utils;
+use crate::{file_utils, RemoteFile};
 use crate::file_utils::FileMetadata;
 
 /// Reads data from the file_system and updates the Database accordingly
@@ -130,3 +131,31 @@ async fn get_next_id(pool: &Pool<Sqlite>) -> Result<i32, sqlx::Error> {
     let next_id = query.get::<i32, _>(0) + 1;
     Ok(next_id)
 }
+
+/// Used for getting the actual file contents from metadata
+/// File path is stored in the database, hence the pool
+pub async fn get_file_contents_from_metadata(pool: &Pool<Sqlite>, metadata: &Vec<FileMetadata>) -> Vec<RemoteFile> {
+    let mut files = Vec::with_capacity(metadata.len());
+    for data in metadata {
+        let path = get_file_paths_from_id(pool, &data)
+            .await
+            .expect(&*format!("Error reading {:?}", data));
+
+        let file = RemoteFile::new(path, data.root_directory.clone(), data.vault_id, data.file_id);
+        files.push(file);
+    }
+    files
+}
+
+/// Takes a vector of metadata, gets the path from the DB
+/// Assumes that all file_ids are already added to the db
+async fn get_file_paths_from_id(pool: &Pool<Sqlite>, file: &FileMetadata) -> Result<PathBuf, sqlx::Error> {
+
+    let str_path = sqlx::query("select file_path from file_metadata where file_id == ?")
+        .bind(file.file_id)
+        .fetch_one(pool)
+        .await?;
+    let path = str_path.get::<String, _>(0);
+    Ok(PathBuf::from(path))
+}
+

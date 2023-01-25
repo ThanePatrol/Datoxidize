@@ -4,21 +4,19 @@ mod server_db_api;
 
 use std::error::Error;
 use std::fs;
-use axum::{
-    routing::{get, post},
-    http::StatusCode,
-    response::IntoResponse,
-    Json, Router,
-};
+use axum::{routing::{get, post}, http::StatusCode, response::IntoResponse, Json, Router, Extension};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use axum::extract::State;
+use axum::middleware::AddExtension;
 use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
+use tokio::sync::Mutex;
 use common::{common_db_utils, RemoteFile};
 use common::file_utils::FileMetadata;
-use sync_core::sync_file_with_server;
-use crate::server_db_api::{get_metadata_blob, get_metadata_differences};
+use crate::server_db_api::{get_metadata_blob, get_metadata_differences, insert_new_metadata_into_db};
+use crate::sync_core::{get_remote_files_for_client, save_user_required_files};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -47,10 +45,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //db_api::add_files_to_db(&pool).await?;
     //let file = fs::read("./templates/directory.html").unwrap();
 
-    tracing_subscriber::fmt::init();
+    //tracing_subscriber::fmt::init();
+
+    // Stores stateful data
+    let mut api_state = Arc::new(Mutex::new(ApiState {
+        client_requested: vec![],
+        pool,
+    }));
 
     // Building application routes
-    let router = router(pool);
+    let router = router(api_state);
 
     // listening on localhost
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
@@ -62,7 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn router(pool: Pool<Sqlite>) -> Router {
+fn router(api_state: Arc<Mutex<ApiState>>) -> Router {
     Router::new()
         // `GET /` goes to `root`
         .route("/", get(common::router_utils::show_files))
@@ -71,16 +75,28 @@ fn router(pool: Pool<Sqlite>) -> Router {
         // GET show_dirs will show the current list of directories being watched
         .route("/show_dirs", get(get_directories))
         // POST /copy takes a JSON form of a file and copies it to the server
-        .route("/copy", post(copy_file))
+        //.route("/copy", post(copy_file))
         // GET /copy/metadata_blob_send gets the files as a metadata blob struct as json and sends to client
         .route("/copy/metadata_blob_send", get(get_metadata_blob))
         //POST /copy/metadata_blob_receive receives the files as a metadata blob from client, this is part of the initial handshake
         .route("/copy/metadata_blob_receive", post(get_metadata_differences))
-
-        .with_state(pool)
+        // POST /copy/metadata_diff_receive receives the file metadata that is new for the server
+        .route("/copy/metadata_diff_receive", post(insert_new_metadata_into_db))
+        // POST /copy/client_needs receives a list of file metadata that the client needs from server
+        .route("/copy/client_needs", post(save_user_required_files))
+        // GET /copy/send_files_to_client_from_state will read from the api_state and return the list of files to the client
+        .route("/copy/send_files_to_client_from_state", get(get_remote_files_for_client))
+        .with_state(api_state)
 }
 
+//todo - where i got up to - add a mutex to this
+#[derive(Clone)]
+pub struct ApiState {
+    pub client_requested: Vec<FileMetadata>,
+    pub pool: Pool<Sqlite>,
+}
 
+/*
 //The argument tells axum to parse request as JSON into RemoteFile
 async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
     let path = payload.full_path.clone();
@@ -92,6 +108,8 @@ async fn copy_file(Json(payload): Json<RemoteFile>) -> impl IntoResponse {
         StatusCode::INTERNAL_SERVER_ERROR
     }
 }
+
+ */
 
 async fn get_directories() -> impl IntoResponse {
     html_creation::test_render().await
@@ -116,12 +134,12 @@ mod tests {
     #[tokio::test]
     async fn copy_file_via_http() {
         let pool = test_db_init().await;
-        let router = router(pool);
+        let router = router(Arc::new(Mutex::new(ApiState {client_requested: vec![], pool})));
         let client = TestClient::new(router);
         let path = PathBuf::from("../client/example_dir/test_file_http/lophostemon_occurrences.csv");
         fs::copy("../client/test_resources/random_test_files/lophostemon_occurrences.csv",
         &path).unwrap();
-        let file = RemoteFile::new(path, "example_dir".to_string(), 0);
+        let file = RemoteFile::new(path, "example_dir".to_string(), 0, 1);
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -145,14 +163,14 @@ mod tests {
     #[tokio::test]
     async fn copy_nested_file_via_http() {
         let pool = test_db_init().await;
-        let router = router(pool);
+        let router = router(Arc::new(Mutex::new(ApiState{client_requested: vec![], pool})));
         let client = TestClient::new(router);
         fs::create_dir_all("../client/example_dir/test_copy_nested_http/http_test/another").unwrap();
         let file_path = "../client/example_dir/test_copy_nested_http/http_test/another/test.csv";
         fs::File::create(file_path).unwrap();
         fs::write(file_path, "test,content,string".to_string()).unwrap();
 
-        let file = common::RemoteFile::new(PathBuf::from(file_path), "example_dir".to_string(), 0);
+        let file = common::RemoteFile::new(PathBuf::from(file_path), "example_dir".to_string(), 0, 1);
 
         let response = client.post("/copy").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);

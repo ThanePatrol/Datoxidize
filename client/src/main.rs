@@ -11,9 +11,9 @@ use fs_extra::dir::DirEntryValue::SystemTime;
 use notify::*;
 use notify::event::CreateKind::Folder;
 use notify::EventKind::Create;
-use tokio::sync::futures;
 use common::config_utils::{deserialize_config};
 use common::common_db_utils;
+use common::file_utils;
 use crate::http_sync::send_metadata_to_server;
 
 #[tokio::main]
@@ -21,9 +21,9 @@ async fn main() -> Result<()> {
     //init environment variables
     dotenvy::from_path("./client/.env").unwrap();
 
-    /// Initial load of db - spawns two lots of pools, gives one to common_utils to read
-    /// local files and insert/update database accordingly
-    /// second pool is used for general communication between client and db
+    // Initial load of db - spawns two lots of pools, gives one to common_utils to read
+    // local files and insert/update database accordingly
+    // second pool is used for general communication between client and db
     let pool = client_db_api::init_db(
         dotenvy::var("DATABASE_URL")
             .unwrap())
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
     tokio::task::spawn_blocking(move || {
-        common_db_utils::init_metadata_load_into_db(&pool2, false);
+        common_db_utils::init_metadata_load_into_db(&pool2, false).unwrap();
     })
         .await
         .unwrap();
@@ -45,18 +45,24 @@ async fn main() -> Result<()> {
             .unwrap())
         .unwrap();
 
-    /// Does initial communication with server, client and url is returned for later reuse
-    /// local_metadata is read from db, server_data is retrieved from server
-    /// file_id is the latest key from the servers db, used to update local files
-    /// that do not exist on server
-    let (client, url, local_data, mut server_data, file_id) =
+    // Does initial communication with server, client and url is returned for later reuse
+    // local_metadata is read from db, server_data is retrieved from server
+    // file_id is the latest key from the servers db, used to update local files
+    // that do not exist on server
+    let (client, url, local_data, file_id) =
         http_sync::init_metadata_sync(url, &pool).await.unwrap();
 
+
+
+
+
+
+
     /// send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
-    send_metadata_to_server(&client, url, local_data).await;
+    //send_metadata_to_server(&client, url, local_data).await;
 
     //todo - metadata diffing on client to ensure only new files are being inserted
-    client_db_api::insert_server_metadata_into_client_db(&pool, &mut server_data).await.unwrap();
+    //client_db_api::insert_server_metadata_into_client_db(&pool, &mut server_data).await.unwrap();
 
 
 
@@ -183,7 +189,7 @@ mod tests {
         let file_path = PathBuf::from("./test_resources/random_test_files/lophostemon_occurrences.csv");
         std::fs::copy(&file_path, "./example_dir/lophostemon_occurrences.csv").unwrap();
         let copied_file = PathBuf::from("./example_dir/lophostemon_occurrences.csv");
-        let file = RemoteFile::new(copied_file.clone(), "example_dir".to_string(), 0);
+        let file = RemoteFile::new(copied_file.clone(), "example_dir".to_string(), 0, 0);
 
         let response = server.post("/copy_to_server").json(&file).send().await;
         assert_eq!(response.status(), StatusCode::OK);

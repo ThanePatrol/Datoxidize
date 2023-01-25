@@ -18,35 +18,34 @@ pub struct RemoteFile {
     pub full_path: PathBuf,
     pub root_directory: String,
     pub contents: Vec<u8>,
-    pub metadata: (SystemTime, SystemTime, u64),
     pub vault_id: i32,
+    pub file_id: i32,
 }
 
 impl RemoteFile {
-    pub fn new(path: PathBuf, root_dir: String, vault_id: i32) -> Self {
-        let metadata = fs::metadata(path.clone()).unwrap();
+    pub fn new(path: PathBuf, root_dir: String, vault_id: i32, file_id: i32) -> Self {
         RemoteFile {
             full_path: path.clone(),
             root_directory: root_dir,
             contents: fs::read(path).unwrap(),
-            metadata: (metadata.accessed().unwrap(), metadata.modified().unwrap(), metadata.len()),
             vault_id,
+            file_id,
         }
     }
 
     /// Meant for testing of code
-    pub fn new_empty(path: PathBuf, root_dir: String, vault_id: i32) -> Self {
+    pub fn new_empty(path: PathBuf, root_dir: String, vault_id: i32, file_id: i32) -> Self {
         RemoteFile {
             full_path: path.clone(),
             root_directory: root_dir,
             contents: vec![],
-            metadata: (SystemTime::UNIX_EPOCH, SystemTime::UNIX_EPOCH, 0),
             vault_id,
+            file_id,
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum ServerPresent {
     Yes,
     No,
@@ -58,10 +57,33 @@ pub struct MetadataBlob {
     pub vaults: HashMap<i32, VaultMetadata>,
 }
 
+impl MetadataBlob {
+    pub fn convert_to_metadata_vec(self) -> Vec<FileMetadata> {
+        let mut files = Vec::with_capacity(self.vaults.len() * 50);
+        for vault in self.vaults {
+            files.append(&mut vault.1.get_metadata_vec())
+        }
+        files
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MetadataDiff {
     pub new_for_server: HashMap<i32, VaultMetadata>,
     pub new_for_client: HashMap<i32, VaultMetadata>,
+}
+
+impl MetadataDiff {
+    pub fn destruct_into_tuple(self) -> (MetadataBlob, MetadataBlob) {
+        (
+            MetadataBlob {
+                vaults: self.new_for_client,
+            },
+            MetadataBlob {
+                vaults: self.new_for_server,
+            }
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -85,13 +107,12 @@ impl VaultMetadata {
 
         for client_file in self.files.iter() {
             // if file_id is -1 then file is not present on server
-            if client_file.file_id == -1 {
+            if client_file.present_on_server == ServerPresent::No {
                 new_for_server.files.push(client_file.clone());
                 continue;
             }
 
             for server_file in server.files.iter() {
-
                 if client_file.compare_to(&server_file) == 1 { // is client file newer than server file
                     new_for_server.files.push(client_file.clone());
                 } else if client_file.compare_to(&server_file) == -1 { //is server file newer than client file
@@ -101,6 +122,10 @@ impl VaultMetadata {
         }
 
         (new_for_client, new_for_server)
+    }
+
+    pub fn get_metadata_vec(&self) -> Vec<FileMetadata> {
+        self.files.clone()
     }
 
 }
@@ -216,6 +241,7 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
     PathBuf::from(path)
 }
 
+/*
 //todo - implement diff_copy to only sync differences
 /// saves the file to the server, if the directory is not present, create it
 pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
@@ -233,6 +259,10 @@ pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultC
 
     Ok(())
 }
+
+
+ */
+
 
 /// Convenience function to read all files in all subdirs of a supplied path
 pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
@@ -330,7 +360,7 @@ pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String,
             file_id: file_path.0,
             present_on_server: match file_path.0 {
                 -1 => ServerPresent::No,
-                x => ServerPresent::Yes,
+                _ => ServerPresent::Yes,
             },
         };
         files.push(file);
