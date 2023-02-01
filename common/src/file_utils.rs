@@ -106,7 +106,6 @@ impl VaultMetadata {
         };
 
         for client_file in self.files.iter() {
-            // if file_id is -1 then file is not present on server
             if client_file.present_on_server == ServerPresent::No {
                 new_for_server.files.push(client_file.clone());
                 continue;
@@ -195,6 +194,7 @@ impl FileMetadata {
 /// Sorts through all files, finds the newest files for both client and server and
 /// returns it in a MetadataDiff struct
 /// As the client will most likely have less vaults than the server, iterate through the client vaults
+/// as we are only interested in the vaults present on a particular device
 pub fn get_metadata_diff(
     client: MetadataBlob,
     server: MetadataBlob) -> MetadataDiff {
@@ -209,9 +209,9 @@ pub fn get_metadata_diff(
     for client_vault in client_vaults.into_iter() {
         let vault_id = client_vault.0;
         let server_vault = server.vaults.get(&vault_id).unwrap();
-        let differences = client_vault.1.get_differences_from_server(server_vault);
-        metadata_diff.new_for_client.insert(vault_id, differences.0);
-        metadata_diff.new_for_server.insert(vault_id, differences.1);
+        let (client_differences, server_differences) = client_vault.1.get_differences_from_server(server_vault);
+        metadata_diff.new_for_client.insert(vault_id, client_differences);
+        metadata_diff.new_for_server.insert(vault_id, server_differences);
     }
 
     metadata_diff

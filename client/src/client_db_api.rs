@@ -67,10 +67,10 @@ async fn get_all_vaults(pool: &Pool<Sqlite>) -> Result<Vec<i32>, sqlx::Error> {
     Ok(vaults)
 }
 
-fn build_file_metadata_for_vault(vault: i32, rows: Vec<SqliteRow>, file_id: i32) -> (i32, Vec<FileMetadata>) {
+fn build_file_metadata_for_vault(vault: i32, rows: Vec<SqliteRow>, latest_file_id: i32) -> (i32, Vec<FileMetadata>) {
     let mut files = Vec::new();
 
-    let mut id = file_id;
+    let mut id = latest_file_id;
 
     rows
         .iter()
@@ -92,7 +92,7 @@ fn build_file_metadata_for_vault(vault: i32, rows: Vec<SqliteRow>, file_id: i32)
                 },
                 present_on_server: ServerPresent::Unknown,
             };
-            if file.file_id == -1 {
+            if row.get::<i32, _>(0) == -1 {
                 file.present_on_server = ServerPresent::No;
             } else {
                 file.present_on_server = ServerPresent::Yes;

@@ -23,18 +23,18 @@ pub async fn init_metadata_sync(
 ) -> Result<(Client, Url, Vec<RemoteFile>, i32), sqlx::Error> {
     let client = Client::new();
 
-    /// Gets metadata from server via http
-    let get_metadata_url = get_metadata_url(&url);
+    // Gets metadata from server via http
+    let get_metadata_url = create_get_metadata_url(&url);
     let (file_id, server_metadata) = get_metadata_from_server(&client, get_metadata_url).await;
 
-    /// Gets local metadata from DB - Also updates file id's to newest
-    let post_metadata_url = post_metadata_url(&url);
+    // Gets local metadata from DB - Also updates file id's to newest
+    let post_metadata_url = create_post_metadata_url(&url);
     let local_metadata = load_file_metadata(pool, file_id).await?;
 
-    /// Gets metadata diff and sends it to server which is then inserted into db
+    // Gets metadata diff and sends it to server which is then inserted into db
     let metadata_diff = file_utils::get_metadata_diff(local_metadata, server_metadata);
     let (client_new, server_new) = metadata_diff.destruct_into_tuple();
-    let metadata_diff_url = post_metadata_diff_url(&url);
+    let metadata_diff_url = create_post_metadata_diff_url(&url);
     post_metadata_diff_to_server(&client, metadata_diff_url, server_new).await;
 
     // requests for files from server to update and/or add
@@ -44,15 +44,8 @@ pub async fn init_metadata_sync(
 
     println!("Files received from server: {:?}", files);
 
-    Ok((
-        client,
-        post_metadata_url,
-        files,
-        file_id,
-    ))
+    Ok((client, post_metadata_url, files, file_id))
 }
-
-
 
 pub async fn send_metadata_to_server(client: &Client, url: Url, blob: MetadataBlob) {
     client.post(url).json(&blob).send().await.unwrap();
@@ -75,8 +68,12 @@ async fn post_metadata_diff_to_server(client: &Client, url: Url, diff: MetadataB
 /// Takes the Client and a MetadataBlob consisting of files that are needed for the client
 /// POST to server with a body of a list of files needed by the client
 /// GET the files in the list
-async fn get_new_files_for_client(client: &Client, parent_url: &Url, blob: MetadataBlob) -> Vec<RemoteFile> {
-    let update_state_url = post_required_files_url(parent_url);
+async fn get_new_files_for_client(
+    client: &Client,
+    parent_url: &Url,
+    blob: MetadataBlob,
+) -> Vec<RemoteFile> {
+    let update_state_url = create_post_required_files_url(parent_url);
     println!("here");
 
     client
@@ -86,7 +83,7 @@ async fn get_new_files_for_client(client: &Client, parent_url: &Url, blob: Metad
         .await
         .unwrap();
 
-    let get_files_url = get_files_init_url(parent_url);
+    let get_files_url = create_get_files_init_url(parent_url);
     client
         .get(get_files_url)
         .send()
@@ -97,31 +94,31 @@ async fn get_new_files_for_client(client: &Client, parent_url: &Url, blob: Metad
         .unwrap()
 }
 
-fn get_metadata_url(parent_url: &Url) -> Url {
+fn create_get_metadata_url(parent_url: &Url) -> Url {
     let mut endpoint = parent_url.clone();
     endpoint.set_path("/copy/metadata_blob_send");
     endpoint
 }
 
-fn post_metadata_url(parent_url: &Url) -> Url {
+fn create_post_metadata_url(parent_url: &Url) -> Url {
     let mut endpoint = parent_url.clone();
     endpoint.set_path("/copy/metadata_blob_receive");
     endpoint
 }
 
-fn post_metadata_diff_url(parent_url: &Url) -> Url {
+fn create_post_metadata_diff_url(parent_url: &Url) -> Url {
     let mut endpoint = parent_url.clone();
     endpoint.set_path("/copy/metadata_diff_receive");
     endpoint
 }
 
-fn post_required_files_url(parent_url: &Url) -> Url {
+fn create_post_required_files_url(parent_url: &Url) -> Url {
     let mut endpoint = parent_url.clone();
     endpoint.set_path("/copy/client_needs");
     endpoint
 }
 
-fn get_files_init_url(parent_url: &Url) -> Url {
+fn create_get_files_init_url(parent_url: &Url) -> Url {
     let mut endpoint = parent_url.clone();
     endpoint.set_path("/copy/send_files_to_client_from_state");
     endpoint

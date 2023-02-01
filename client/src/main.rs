@@ -3,18 +3,8 @@ extern crate core;
 mod http_sync;
 mod client_db_api;
 
-use std::alloc::System;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time;
-use fs_extra::dir::DirEntryValue::SystemTime;
 use notify::*;
-use notify::event::CreateKind::Folder;
-use notify::EventKind::Create;
-use common::config_utils::{deserialize_config};
 use common::common_db_utils;
-use common::file_utils;
-use crate::http_sync::send_metadata_to_server;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -58,7 +48,7 @@ async fn main() -> Result<()> {
 
 
 
-    /// send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
+    // send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
     //send_metadata_to_server(&client, url, local_data).await;
 
     //todo - metadata diffing on client to ensure only new files are being inserted
