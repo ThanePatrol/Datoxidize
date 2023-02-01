@@ -11,6 +11,7 @@
       <sourceFolder url="file://$MODULE_DIR$/client/test_resources" type="java-test-resource" />
       <sourceFolder url="file://$MODULE_DIR$/common/resources" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/common/test_resources" type="java-test-resource" />
       <excludeFolder url="file://$MODULE_DIR$/datoxidize/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

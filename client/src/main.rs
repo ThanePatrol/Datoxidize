@@ -122,7 +122,7 @@ mod tests {
             .await
             .unwrap();
 
-        /// Should only be one file in the db
+        // Should only be one file in the db
         assert_eq!(rows.len(), 1);
 
 

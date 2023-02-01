@@ -1,14 +1,11 @@
 use std::{fs};
 use std::collections::HashMap;
-use std::error::Error;
 use std::path::{PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use filetime::FileTime;
 use rayon::prelude::*;
 pub use serde::{Deserialize, Serialize};
 use crate::config_utils::{VaultConfig};
 
-//todo - add file_id
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
 /// Even with a straight copy
@@ -59,9 +56,13 @@ pub struct MetadataBlob {
 
 impl MetadataBlob {
     pub fn convert_to_metadata_vec(self) -> Vec<FileMetadata> {
-        let mut files = Vec::with_capacity(self.vaults.len() * 50);
+        let mut files = Vec::with_capacity(self.vaults.len() * 5);
         for vault in self.vaults {
-            files.append(&mut vault.1.get_metadata_vec())
+            for file in vault.1.files {
+                if !files.contains(&file) {
+                    files.push(file);
+                }
+            }
         }
         files
     }
@@ -139,6 +140,12 @@ pub struct FileMetadata {
     pub vault_id: i32,
     pub file_id: i32,
     pub present_on_server: ServerPresent,
+}
+
+impl PartialEq for FileMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.file_id == other.file_id
+    }
 }
 
 impl FileMetadata {
@@ -241,27 +248,6 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
     PathBuf::from(path)
 }
 
-/*
-//todo - implement diff_copy to only sync differences
-/// saves the file to the server, if the directory is not present, create it
-pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
-    let full_path = get_server_path(client_file, vault_config);
-    //todo - handle parent option error by logging
-    let directory = full_path.parent().unwrap();
-
-    fs::create_dir_all(directory)?;
-    fs::write(&full_path, &client_file.contents)?;
-
-    filetime::set_file_times(
-        full_path,
-        FileTime::from_system_time(*&client_file.metadata.0),
-        FileTime::from_system_time(*&client_file.metadata.1))?;
-
-    Ok(())
-}
-
-
- */
 
 
 /// Convenience function to read all files in all subdirs of a supplied path
@@ -305,9 +291,9 @@ pub fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> 
         vaults: HashMap::new(),
     };
 
-    for mut vault in vaults {
+    for vault in vaults {
 
-        update_list_of_file_metadata(&mut vault.1);
+        //update_list_of_file_metadata(&mut vault.1);
 
         let new_vault = VaultMetadata {
             files: vault.1,
@@ -319,26 +305,13 @@ pub fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> 
     blob
 }
 
-//todo - make this only update files if they're changed
-fn update_list_of_file_metadata(files: &mut Vec<FileMetadata>) {
-    files.par_iter_mut().for_each(|file| update_file_metadata(file));
-}
-
-/// Used for updating a the metadata of a file. Useful for the initial startup of a client and/or server
-fn update_file_metadata(file: &mut FileMetadata) {
-    let metadata = fs::metadata(&file.full_path)
-        .expect(&*format!("Error reading metadata from {:?}", file.full_path));
-
-    file.modified_time = metadata.modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-    file.file_size = metadata.len() as i64;
-}
-
 /// Takes a vec of path and file_id tuples, root_directory of vault and vault id
 /// then reads the file system and creates a Vec<FileMetadata> and returns it
 pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String, vault_id: i32) -> Vec<FileMetadata> {
     let mut files = Vec::new();
 
     for path in paths {
+        println!("path is: {:?}", path.1);
         let metadata = fs::metadata(&path.1)
             .expect(&*format!("Error reading metadata from {:?}", path));
 
@@ -368,3 +341,72 @@ pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String,
 
     files
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+    use tokio::time;
+    use super::*;
+
+    fn test_get_file_metadata_from_path() {
+        let vault_id = 0;
+        let path = String::from("common/test_resources/metadata/test_update_file_metadata.txt");
+        let path_buf = PathBuf::from(path);
+        let root_dir = String::from("common/test_resources/metadata/");
+        fs::File::create(&path_buf).unwrap();
+        let metadata = fs::metadata(&path_buf).unwrap();
+
+        let modified_time = metadata
+            .modified()
+            .expect(&*format!("Error reading modified metadata from {:?}", &path_buf))
+            .duration_since(UNIX_EPOCH).unwrap()
+            .as_secs() as i64;
+        let file_size = metadata.len() as i64;
+
+
+        let file = FileMetadata {
+            full_path: path_buf.clone(),
+            root_directory: root_dir.clone(),
+            modified_time,
+            file_size,
+            vault_id: 0,
+            file_id: 0,
+            present_on_server: ServerPresent::Yes,
+        };
+
+        std::thread::sleep(Duration::from_secs(1));
+        fs::write(&path_buf, "some text").unwrap();
+        let now_modified = fs::metadata(&path_buf).unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+
+
+    }
+}
+
+
+/*
+//todo - implement diff_copy to only sync differences
+/// saves the file to the server, if the directory is not present, create it
+pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
+    let full_path = get_server_path(client_file, vault_config);
+    //todo - handle parent option error by logging
+    let directory = full_path.parent().unwrap();
+
+    fs::create_dir_all(directory)?;
+    fs::write(&full_path, &client_file.contents)?;
+
+    filetime::set_file_times(
+        full_path,
+        FileTime::from_system_time(*&client_file.metadata.0),
+        FileTime::from_system_time(*&client_file.metadata.1))?;
+
+    Ok(())
+}
+
+
+ */

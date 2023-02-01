@@ -40,11 +40,12 @@ pub async fn init_metadata_load_into_db(
 /// Does an update/insert on the database, insert files or update them if already exists
 /// This is intended for initial DB load
 /// sets modified_time and file_size to the current file
-/// 
+///
 pub async fn upsert_database(
     pool: &Pool<Sqlite>,
     files: Vec<FileMetadata>,
 ) -> Result<(), sqlx::Error> {
+    println!("all my files: {:?}", files);
     for file in files {
         println!("executing upsert for: {:?}", file);
 
@@ -60,9 +61,10 @@ pub async fn upsert_database(
             .execute(pool)
             .await?;
 
-        sqlx::query("UPDATE file_metadata SET modified_time = ?, file_size = ? WHERE modified_time != ? OR file_size != ?;")
+        sqlx::query("UPDATE file_metadata SET modified_time = ?, file_size = ? WHERE file_id == ? AND (modified_time != ? OR file_size != ?);")
             .bind(file.modified_time)
             .bind(file.file_size)
+            .bind(file.file_id)
             .bind(file.modified_time)
             .bind(file.file_size)
             .execute(pool)

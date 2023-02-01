@@ -23,9 +23,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //init environment variables
     dotenvy::from_path("./backend/.env").unwrap();
 
-    /// Initial load of db - spawns two lots of pools, gives one to common_utils to read
-    /// local files and insert/update database accordingly
-    /// second pool is used for general communication between client and db
+    // Initial load of db - spawns two lots of pools, gives one to common_utils to read
+    // local files and insert/update database accordingly
+    // second pool is used for general communication between client and db
     let pool = server_db_api::init_db(
         var("DATABASE_URL")
             .unwrap())

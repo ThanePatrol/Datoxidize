@@ -21,6 +21,7 @@ pub async fn save_user_required_files(
     State(state): State<Arc<Mutex<ApiState>>>,
     Json(payload): Json<Vec<FileMetadata>>)
 -> impl IntoResponse {
+    println!("client request: {:?}", payload);
     state.lock().await.client_requested = payload;
     StatusCode::OK
 }
