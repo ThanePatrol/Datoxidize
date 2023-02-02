@@ -26,11 +26,16 @@ pub async fn init_metadata_load_into_db(
 
         println!("paths in init_metadata_load_into_db: {:?}", paths);
 
-        remove_old_entries_from_db(pool, &paths).await?;
+        remove_old_entries_from_db(pool).await?;
 
         let path_with_id = assign_file_ids(pool, paths, is_server).await?;
 
-        let file_metadata = file_utils::get_file_metadata_from_path(path_with_id, root_dir, vault_id);
+        let file_metadata =
+            file_utils::get_file_metadata_from_path(path_with_id, root_dir, vault_id);
+
+        //todo - use https://stackoverflow.com/questions/44419890/replacing-path-parts-in-rust
+        // to create absolute paths on both the server and the client
+        // server could potentially have a relative path but client should have absolute
 
         upsert_database(pool, file_metadata).await?;
     }
@@ -40,7 +45,6 @@ pub async fn init_metadata_load_into_db(
 /// Does an update/insert on the database, insert files or update them if already exists
 /// This is intended for initial DB load
 /// sets modified_time and file_size to the current file
-///
 pub async fn upsert_database(
     pool: &Pool<Sqlite>,
     files: Vec<FileMetadata>,
@@ -74,11 +78,25 @@ pub async fn upsert_database(
 }
 
 /// Reads through all the paths given from the Database, if not present then remove entry from database
-async fn remove_old_entries_from_db(
-    pool: &Pool<Sqlite>,
-    paths: &Vec<PathBuf>,
-) -> Result<(), sqlx::Error> {
-    for path in paths {
+async fn remove_old_entries_from_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    async fn get_paths_from_db(pool: &Pool<Sqlite>) -> Result<Vec<PathBuf>, sqlx::Error> {
+        let rows = sqlx::query("select file_path from file_metadata;")
+            .fetch_all(pool)
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let path = row.get::<String, _>(0);
+                PathBuf::from(path)
+            })
+            .collect::<Vec<PathBuf>>())
+    }
+
+    let db_paths = get_paths_from_db(pool).await?;
+
+    for path in db_paths {
+        println!("checking path: {:?}", path);
         if path.exists() {
             continue;
         }
