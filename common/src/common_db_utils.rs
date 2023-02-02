@@ -36,6 +36,10 @@ pub async fn init_metadata_load_into_db(
         //todo - use https://stackoverflow.com/questions/44419890/replacing-path-parts-in-rust
         // to create absolute paths on both the server and the client
         // server could potentially have a relative path but client should have absolute
+        // make sure to use https://doc.rust-lang.org/std/path/constant.MAIN_SEPARATOR.html
+        // instead of /
+        // strip prefix using .strip_prefix(), take the absolute path parent, add separator, add vault dir, add separator
+        // then add the rest of the content that was stripped
 
         upsert_database(pool, file_metadata).await?;
     }
