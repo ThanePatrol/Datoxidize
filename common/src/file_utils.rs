@@ -1,10 +1,9 @@
-use std::{fs};
-use std::collections::HashMap;
-use std::path::{PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use rayon::prelude::*;
+use crate::config_utils::VaultConfig;
 pub use serde::{Deserialize, Serialize};
-use crate::config_utils::{VaultConfig};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{UNIX_EPOCH};
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
@@ -82,7 +81,7 @@ impl MetadataDiff {
             },
             MetadataBlob {
                 vaults: self.new_for_server,
-            }
+            },
         )
     }
 }
@@ -95,7 +94,10 @@ pub struct VaultMetadata {
 
 impl VaultMetadata {
     /// Returns a new VaultMetadata tuple, 0 idx is new for client, 1st is new for server
-    pub fn get_differences_from_server(&self, server: &VaultMetadata) -> (VaultMetadata, VaultMetadata) {
+    pub fn get_differences_from_server(
+        &self,
+        server: &VaultMetadata,
+    ) -> (VaultMetadata, VaultMetadata) {
         let mut new_for_client = VaultMetadata {
             files: vec![],
             vault_id: server.vault_id,
@@ -113,9 +115,11 @@ impl VaultMetadata {
             }
 
             for server_file in server.files.iter() {
-                if client_file.compare_to(&server_file) == 1 { // is client file newer than server file
+                if client_file.compare_to(&server_file) == 1 {
+                    // is client file newer than server file
                     new_for_server.files.push(client_file.clone());
-                } else if client_file.compare_to(&server_file) == -1 { //is server file newer than client file
+                } else if client_file.compare_to(&server_file) == -1 {
+                    //is server file newer than client file
                     new_for_client.files.push(server_file.clone())
                 }
             }
@@ -127,9 +131,7 @@ impl VaultMetadata {
     pub fn get_metadata_vec(&self) -> Vec<FileMetadata> {
         self.files.clone()
     }
-
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileMetadata {
@@ -191,44 +193,48 @@ impl FileMetadata {
     /// Returns -1 if the calling struct is older than the other struct
     /// 0 if equal
     pub fn compare_to(&self, other: &FileMetadata) -> i32 {
-        if self.modified_time > other.modified_time { return 1; }
-        if self.modified_time < other.modified_time { return -1; }
+        if self.modified_time > other.modified_time {
+            return 1;
+        }
+        if self.modified_time < other.modified_time {
+            return -1;
+        }
         0
     }
 }
-
 
 /// Sorts through all files, finds the newest files for both client and server and
 /// returns it in a MetadataDiff struct
 /// As the client will most likely have less vaults than the server, iterate through the client vaults
 /// as we are only interested in the vaults present on a particular device
-pub fn get_metadata_diff(
-    client: MetadataBlob,
-    server: MetadataBlob) -> MetadataDiff {
-
+pub fn get_metadata_diff(client: MetadataBlob, server: MetadataBlob) -> MetadataDiff {
     let mut metadata_diff = MetadataDiff {
         new_for_server: HashMap::new(),
         new_for_client: HashMap::new(),
     };
 
-
     let client_vaults = client.vaults;
     for client_vault in client_vaults.into_iter() {
         let vault_id = client_vault.0;
         let server_vault = server.vaults.get(&vault_id).unwrap();
-        let (client_differences, server_differences) = client_vault.1.get_differences_from_server(server_vault);
-        metadata_diff.new_for_client.insert(vault_id, client_differences);
-        metadata_diff.new_for_server.insert(vault_id, server_differences);
+        let (client_differences, server_differences) =
+            client_vault.1.get_differences_from_server(server_vault);
+        metadata_diff
+            .new_for_client
+            .insert(vault_id, client_differences);
+        metadata_diff
+            .new_for_server
+            .insert(vault_id, server_differences);
     }
 
     metadata_diff
 }
 
-
 pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
     fn build_server_dir_structure(client: &RemoteFile) -> String {
         let vault_root = client.root_directory.clone();
-        client.full_path
+        client
+            .full_path
             .clone()
             .as_os_str()
             .to_str()
@@ -247,8 +253,6 @@ pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
 
     PathBuf::from(path)
 }
-
-
 
 /// Convenience function to read all files in all subdirs of a supplied path
 pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
@@ -281,7 +285,6 @@ pub fn convert_blob_to_vec_metadata(blob: &mut MetadataBlob) -> Vec<FileMetadata
     files
 }
 
-
 /// Used as a helper function to init the DB - ensure that all files in directories declared as vaults
 /// have been read and the database has up to date metadata on initial startup
 /// accepts a hashmap as param => key of vault id, value of vector of file paths.
@@ -292,7 +295,6 @@ pub fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> 
     };
 
     for vault in vaults {
-
         //update_list_of_file_metadata(&mut vault.1);
 
         let new_vault = VaultMetadata {
@@ -307,13 +309,17 @@ pub fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> 
 
 /// Takes a vec of path and file_id tuples, root_directory of vault and vault id
 /// then reads the file system and creates a Vec<FileMetadata> and returns it
-pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String, vault_id: i32) -> Vec<FileMetadata> {
+pub fn get_file_metadata_from_path(
+    paths: Vec<(i32, PathBuf)>,
+    root_dir: String,
+    vault_id: i32,
+) -> Vec<FileMetadata> {
     let mut files = Vec::new();
 
     for path in paths {
         println!("path is: {:?}", path.1);
-        let metadata = fs::metadata(&path.1)
-            .expect(&*format!("Error reading metadata from {:?}", path));
+        let metadata =
+            fs::metadata(&path.1).expect(&*format!("Error reading metadata from {:?}", path));
 
         let vault_id = vault_id;
         let file_path = path.clone();
@@ -321,7 +327,8 @@ pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String,
         let modified_time = metadata
             .modified()
             .expect(&*format!("Error reading modified metadata from {:?}", path))
-            .duration_since(UNIX_EPOCH).unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
             .as_secs() as i64;
         let file_size = metadata.len() as i64;
         let file = FileMetadata {
@@ -342,11 +349,39 @@ pub fn get_file_metadata_from_path(paths: Vec<(i32, PathBuf)>, root_dir: String,
     files
 }
 
+/// Strips path prefixes at the root directory to get the absolute path for the client and/or server
+/// Expects remote_file to be the file itself, remote root to be the rootpath of the directory and
+/// local root to be the root path for the local system.
+/// eg: remote_file = /home/root_dir/example_dir/file.txt
+///     remote_root = /home/root_dir
+///     local_root = /home/different_root_dir
+/// will return /home/different_root_dir/example_dir/file.txt
+pub fn convert_path_to_local(
+    remote_file: &PathBuf,
+    remote_root: &PathBuf,
+    local_root: &PathBuf,
+) -> PathBuf {
+    let relative = remote_file.strip_prefix(remote_root)
+        .expect(&*format!("Error stripping prefix of {:?} with {:?} - are the paths different",
+                          remote_file, remote_root));
+    local_root.join(relative)
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-    use tokio::time;
     use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn test_convert_path_to_local() {
+        let file = PathBuf::from("/home/meurer/test/a/01/foo.txt");
+        let src = PathBuf::from("/home/meurer/test/a");
+        let dst = PathBuf::from("/home/meurer/test/b");
+
+        let result = convert_path_to_local(&file, &src, &dst);
+
+        assert_eq!(result, PathBuf::from("/home/meurer/test/b/01/foo.txt"));
+    }
 
     fn test_get_file_metadata_from_path() {
         let vault_id = 0;
@@ -358,11 +393,14 @@ mod tests {
 
         let modified_time = metadata
             .modified()
-            .expect(&*format!("Error reading modified metadata from {:?}", &path_buf))
-            .duration_since(UNIX_EPOCH).unwrap()
+            .expect(&*format!(
+                "Error reading modified metadata from {:?}",
+                &path_buf
+            ))
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
             .as_secs() as i64;
         let file_size = metadata.len() as i64;
-
 
         let file = FileMetadata {
             full_path: path_buf.clone(),
@@ -376,18 +414,15 @@ mod tests {
 
         std::thread::sleep(Duration::from_secs(1));
         fs::write(&path_buf, "some text").unwrap();
-        let now_modified = fs::metadata(&path_buf).unwrap()
+        let now_modified = fs::metadata(&path_buf)
+            .unwrap()
             .modified()
             .unwrap()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-
-
-
     }
 }
-
 
 /*
 //todo - implement diff_copy to only sync differences

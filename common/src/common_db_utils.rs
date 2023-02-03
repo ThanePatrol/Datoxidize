@@ -2,7 +2,6 @@ use crate::file_utils::FileMetadata;
 use crate::{file_utils, RemoteFile};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
-use std::fmt::format;
 use std::path::PathBuf;
 
 /// Reads data from the file_system and updates the Database accordingly
