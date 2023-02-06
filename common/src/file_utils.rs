@@ -3,7 +3,7 @@ pub use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
@@ -137,6 +137,7 @@ impl VaultMetadata {
 pub struct FileMetadata {
     pub full_path: PathBuf,
     pub root_directory: String,
+    pub absolute_root_dir: PathBuf,
     pub modified_time: i64,
     pub file_size: i64,
     pub vault_id: i32,
@@ -155,6 +156,7 @@ impl FileMetadata {
         file_id: i32,
         vault_id: i32,
         file_path: PathBuf,
+        absolute_root_dir: PathBuf,
         root_dir: String,
         mod_time: i64,
         file_size: i64,
@@ -162,6 +164,7 @@ impl FileMetadata {
         FileMetadata {
             full_path: file_path,
             root_directory: root_dir,
+            absolute_root_dir,
             modified_time: mod_time,
             file_size,
             vault_id,
@@ -173,6 +176,7 @@ impl FileMetadata {
     pub fn new_from_client(
         full_path: PathBuf,
         root_directory: String,
+        absolute_root_dir: PathBuf,
         modified_time: i64,
         file_size: i64,
         vault_id: i32,
@@ -181,6 +185,7 @@ impl FileMetadata {
         FileMetadata {
             full_path,
             root_directory,
+            absolute_root_dir,
             modified_time,
             file_size,
             vault_id,
@@ -230,29 +235,6 @@ pub fn get_metadata_diff(client: MetadataBlob, server: MetadataBlob) -> Metadata
     metadata_diff
 }
 
-pub fn get_server_path(client: &RemoteFile, vault: &VaultConfig) -> PathBuf {
-    fn build_server_dir_structure(client: &RemoteFile) -> String {
-        let vault_root = client.root_directory.clone();
-        client
-            .full_path
-            .clone()
-            .as_os_str()
-            .to_str()
-            .expect(&*format!("Error casting {:?} to string", client.full_path))
-            .to_string()
-            .rsplit_once(vault_root.as_str())
-            .expect(&*format!("Pattern {} not found", vault_root))
-            .1
-            .to_string()
-    }
-
-    let mut path = String::from("./storage/");
-    path.push_str("vault");
-    path.push_str(&vault.vault_id.to_string());
-    path.push_str(build_server_dir_structure(client).as_str());
-
-    PathBuf::from(path)
-}
 
 /// Convenience function to read all files in all subdirs of a supplied path
 pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
@@ -312,6 +294,7 @@ pub fn read_all_local_file_metadata(vaults: HashMap<i32, Vec<FileMetadata>>) -> 
 pub fn get_file_metadata_from_path(
     paths: Vec<(i32, PathBuf)>,
     root_dir: String,
+    absolute_root_dir: PathBuf,
     vault_id: i32,
 ) -> Vec<FileMetadata> {
     let mut files = Vec::new();
@@ -334,6 +317,7 @@ pub fn get_file_metadata_from_path(
         let file = FileMetadata {
             full_path: file_path.1,
             root_directory,
+            absolute_root_dir: absolute_root_dir.clone(),
             modified_time,
             file_size,
             vault_id,
@@ -349,6 +333,19 @@ pub fn get_file_metadata_from_path(
     files
 }
 
+//temp function to convert all current paths in the db into their respective local paths
+pub fn convert_all_paths(
+    files: &Vec<PathBuf>,
+    remote_root: &PathBuf,
+    local_root: &PathBuf,
+) -> Vec<PathBuf> {
+    let mut converted_paths = Vec::with_capacity(files.len());
+    for file in files {
+        converted_paths.push(convert_path_to_local(file, remote_root, local_root));
+    }
+    converted_paths
+}
+
 /// Strips path prefixes at the root directory to get the absolute path for the client and/or server
 /// Expects remote_file to be the file itself, remote root to be the rootpath of the directory and
 /// local root to be the root path for the local system.
@@ -361,9 +358,10 @@ pub fn convert_path_to_local(
     remote_root: &PathBuf,
     local_root: &PathBuf,
 ) -> PathBuf {
-    let relative = remote_file.strip_prefix(remote_root)
-        .expect(&*format!("Error stripping prefix of {:?} with {:?} - are the paths different",
-                          remote_file, remote_root));
+    let relative = remote_file.strip_prefix(remote_root).expect(&*format!(
+        "Error stripping prefix of {:?} with {:?} - are the paths different",
+        remote_file, remote_root
+    ));
     local_root.join(relative)
 }
 
@@ -374,13 +372,16 @@ mod tests {
 
     #[test]
     fn test_convert_path_to_local() {
-        let file = PathBuf::from("/home/meurer/test/a/01/foo.txt");
-        let src = PathBuf::from("/home/meurer/test/a");
-        let dst = PathBuf::from("/home/meurer/test/b");
+        let file = PathBuf::from("/home/root_dir/example_dir/file.txt");
+        let src = PathBuf::from("/home/root_dir");
+        let dst = PathBuf::from("/home/different_root_dir");
 
         let result = convert_path_to_local(&file, &src, &dst);
 
-        assert_eq!(result, PathBuf::from("/home/meurer/test/b/01/foo.txt"));
+        assert_eq!(
+            result,
+            PathBuf::from("/home/different_root_dir/example_dir/file.txt")
+        );
     }
 
     fn test_get_file_metadata_from_path() {
@@ -405,6 +406,7 @@ mod tests {
         let file = FileMetadata {
             full_path: path_buf.clone(),
             root_directory: root_dir.clone(),
+            absolute_root_dir: Default::default(),
             modified_time,
             file_size,
             vault_id: 0,

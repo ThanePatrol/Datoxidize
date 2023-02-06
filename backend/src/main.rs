@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fs;
 use axum::{routing::{get, post}, http::StatusCode, response::IntoResponse, Json, Router, Extension};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use axum::extract::State;
 use axum::middleware::AddExtension;
@@ -13,7 +14,7 @@ use dotenvy::{dotenv, var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
 use tokio::sync::Mutex;
-use common::{common_db_utils, RemoteFile};
+use common::{common_db_utils, file_utils, RemoteFile};
 use common::file_utils::FileMetadata;
 use crate::server_db_api::{get_metadata_blob, get_metadata_differences, insert_new_metadata_into_db};
 use crate::sync_core::{get_remote_files_for_client, save_user_required_files};
@@ -34,6 +35,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         var("DATABASE_URL")
             .unwrap())
         .await?;
+
+
     tokio::task::spawn_blocking(move || {
         common_db_utils::init_metadata_load_into_db(&pool2, true);
     })

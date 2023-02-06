@@ -1,4 +1,4 @@
-use crate::file_utils::FileMetadata;
+use crate::file_utils::{FileMetadata, MetadataBlob};
 use crate::{file_utils, RemoteFile};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Pool, Row, Sqlite};
@@ -30,7 +30,7 @@ pub async fn init_metadata_load_into_db(
         let path_with_id = assign_file_ids(pool, paths, is_server).await?;
 
         let file_metadata =
-            file_utils::get_file_metadata_from_path(path_with_id, root_dir, vault_id);
+            file_utils::get_file_metadata_from_path(path_with_id, root_dir, vault_path, vault_id);
 
         //todo - use https://stackoverflow.com/questions/44419890/replacing-path-parts-in-rust
         // to create absolute paths on both the server and the client
@@ -52,7 +52,6 @@ pub async fn upsert_database(
     pool: &Pool<Sqlite>,
     files: Vec<FileMetadata>,
 ) -> Result<(), sqlx::Error> {
-    println!("all my files: {:?}", files);
     for file in files {
         println!("executing upsert for: {:?}", file);
 
@@ -114,6 +113,7 @@ async fn remove_old_entries_from_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Err
 
 /// Takes a vector of rows from client_db vault. Returns a vector of tuples
 /// 0th index is the vault_id, 1st is the absolute path of the vault, 2nd is the root directory as String
+
 fn get_vaults_from_rows(rows: Vec<SqliteRow>) -> Vec<(i32, PathBuf, String)> {
     rows.iter()
         .map(|row| {
@@ -135,6 +135,7 @@ async fn assign_file_ids(
     is_server: bool,
 ) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
     let mut paths_with_ids = Vec::new();
+
     for path in paths {
         let row = sqlx::query("select file_id from file_metadata where file_path == ?")
             .bind(path.to_str().unwrap())
@@ -156,6 +157,7 @@ async fn assign_file_ids(
 
         paths_with_ids.push((file_id, path))
     }
+
     Ok(paths_with_ids)
 }
 
@@ -202,4 +204,45 @@ async fn get_file_paths_from_id(
         .await?;
     let path = str_path.get::<String, _>(0);
     Ok(PathBuf::from(path))
+}
+
+/// Gets the root directory for all vaults of the server
+/// Server stores data as:
+/// /home/root/storage/vault0
+/// /home/root/storage/vault1
+/// The function will return a vec of pathbufs eg: ["/home/root/storage/vault0", "/home/root/storage/vault1"]
+async fn get_root_local_root_directory(pool: &Pool<Sqlite>) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
+    let root_paths = sqlx::query("select vault_id, abs_path from vaults;")
+        .fetch_all(pool)
+        .await?;
+
+    let root_paths = root_paths
+        .iter()
+        .map(|row| {
+
+            let raw_string = row.get::<String, _>(1);
+
+            (row.get::<i32, _>(0), PathBuf::from(raw_string))
+        })
+        .collect::<Vec<(i32, PathBuf)>>();
+    Ok(root_paths)
+}
+
+/// Iterates through a metadata blob - finds matching vaults then updates all the paths from the metadatablob
+/// to the correct path for the server using file_utils
+pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut MetadataBlob) -> Result<(), sqlx::Error> {
+    let root_dirs = get_root_local_root_directory(pool).await?;
+
+    for (id, metadata) in metadata.vaults.iter_mut() {
+        for (vault_id, root_path) in root_dirs.iter() {
+            if vault_id == id {
+                for file in metadata.files.iter_mut() {
+                    let new_path = file_utils::convert_path_to_local(&file.full_path, &file.absolute_root_dir, root_path);
+                    file.full_path = new_path;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

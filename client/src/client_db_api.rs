@@ -76,9 +76,13 @@ fn build_file_metadata_for_vault(vault: i32, rows: Vec<SqliteRow>, latest_file_i
         .iter()
         .for_each(|row| {
             let path = PathBuf::from(row.get::<String, _>(1));
+            let mut absolute_root_dir = path.clone();
+            absolute_root_dir.pop();
+
             let mut file = FileMetadata {
                 full_path: path,
                 root_directory: row.get::<String, _>(2),
+                absolute_root_dir,
                 modified_time: row.get::<i64, _>(3),
                 file_size: row.get::<i64, _>(4),
                 vault_id: vault,

@@ -11,8 +11,9 @@ use axum::routing::get;
 use sqlx::{Pool, Row, Sqlite, SqlitePool};
 use sqlx::sqlite::{SqlitePoolOptions, SqliteRow};
 use tokio::sync::Mutex;
-use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata, ServerPresent};
+use common::file_utils::{MetadataBlob, FileMetadata, VaultMetadata, ServerPresent, convert_path_to_local};
 use common::{common_db_utils, file_utils, RemoteFile};
+use common::common_db_utils::convert_root_dirs_of_metadata;
 use crate::ApiState;
 
 /// Main database tables on the server are:
@@ -93,7 +94,14 @@ pub async fn insert_new_metadata_into_db(
     Json(client_blob): Json<MetadataBlob>,
 ) -> impl IntoResponse {
     let pool = &state.lock().await.pool;
-    let files = client_blob.convert_to_metadata_vec();
+
+    let mut client = client_blob;
+    convert_root_dirs_of_metadata(pool, &mut client)
+        .await
+        .expect(&*format!("Error converting file paths for {:?}", client));
+
+    let files = client.convert_to_metadata_vec();
+
     common_db_utils::upsert_database(pool, files)
         .await
         .expect(&*format!("Error inserting vec of  \n into database"));
@@ -116,42 +124,48 @@ pub async fn get_metadata_differences(
 
 /// Helper function that queries DB and returns a blob of Metadata
 async fn build_metadata_blob(pool: &Pool<Sqlite>) -> Result<MetadataBlob, sqlx::Error> {
-    let vault_query = sqlx::query("select vault_id from vaults")
+    let vault_query = sqlx::query("select vault_id, abs_path from vaults")
         .fetch_all(pool)
         .await?;
 
     let vaults = vault_query
         .iter()
-        .map(|row| row.get::<i32, _>(0))
-        .collect::<Vec<i32>>();
+        .map(|row|
+            (row.get::<i32, _>(0),
+             row.get::<String, _>(1)))
+        .collect::<Vec<(i32, String)>>();
 
     let mut blob = MetadataBlob {
         vaults: HashMap::new(),
     };
 
+
     println!("vaults: {:?}", vaults);
 
     for vault in vaults {
         let query: Vec<SqliteRow> = sqlx::query("select * from file_metadata where vault_id == ? ;")
-            .bind(vault)
+            .bind(vault.0)
             .fetch_all(pool)
             .await?;
 
-        let files = map_metadata_query_to_blob(query);
+        //absolute root path for the specific vault
+        let absolute_path = PathBuf::from(vault.1);
+
+        let files = map_metadata_query_to_blob(query, absolute_path);
         println!("files: {:?}", files);
 
         let vault_md = VaultMetadata {
             files,
-            vault_id: vault,
+            vault_id: vault.0,
         };
-        blob.vaults.insert(vault, vault_md);
+        blob.vaults.insert(vault.0, vault_md);
     }
 
     Ok(blob)
 }
 
 /// A helper method to abstract away the ugly code required to map the rows of data to a vector
-fn map_metadata_query_to_blob(rows: Vec<SqliteRow>) -> Vec<FileMetadata> {
+fn map_metadata_query_to_blob(rows: Vec<SqliteRow>, absolute_root_dir: PathBuf) -> Vec<FileMetadata> {
     let mut result = Vec::new();
     rows
         .iter()
@@ -163,9 +177,11 @@ fn map_metadata_query_to_blob(rows: Vec<SqliteRow>) -> Vec<FileMetadata> {
             let modified_time = row.get::<i64, _>(4);
             let file_size = row.get::<i64, _>(5);
 
+
             let file = FileMetadata {
                 full_path: file_path.parse().unwrap(),
                 root_directory,
+                absolute_root_dir: absolute_root_dir.clone(),
                 modified_time,
                 file_size,
                 vault_id,

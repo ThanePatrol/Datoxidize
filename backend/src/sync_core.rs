@@ -1,26 +1,17 @@
-use std::collections::HashMap;
-use std::{fs};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
+use crate::ApiState;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Json;
 use axum::response::IntoResponse;
-use fs_extra::dir::DirEntryValue::SystemTime;
-use once_cell::sync::Lazy;
-use sqlx::{Pool, Sqlite};
-use tokio::sync::Mutex;
-use common::file_utils::{FileMetadata, get_server_path, MetadataBlob, VaultMetadata};
+use axum::Json;
+use common::file_utils::{FileMetadata, VaultMetadata};
 use common::{common_db_utils, file_utils, RemoteFile};
-use common::config_utils::{deserialize_vault_config, VaultConfig};
-use crate::ApiState;
-
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub async fn save_user_required_files(
     State(state): State<Arc<Mutex<ApiState>>>,
-    Json(payload): Json<Vec<FileMetadata>>)
--> impl IntoResponse {
+    Json(payload): Json<Vec<FileMetadata>>,
+) -> impl IntoResponse {
     println!("client request: {:?}", payload);
     state.lock().await.client_requested = payload;
     StatusCode::OK
@@ -31,16 +22,10 @@ pub async fn get_remote_files_for_client(
 ) -> impl IntoResponse {
     let pool = &state.lock().await.pool;
     let metadata = &state.lock().await.client_requested;
-    let files = common_db_utils::get_file_contents_from_metadata(pool, &metadata)
-        .await;
-
+    let files = common_db_utils::get_file_contents_from_metadata(pool, &metadata).await;
 }
 
 /*-----------------------------OLD STUFF BELOW-----------------------------------------*/
-
-
-
-
 
 /*
 
@@ -126,5 +111,3 @@ mod tests {
     }
 
 */
-
-
