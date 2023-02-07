@@ -1,6 +1,6 @@
 extern crate core;
 
-mod http_sync;
+mod client_http_sync;
 mod client_db_api;
 
 use notify::*;
@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
     // file_id is the latest key from the servers db, used to update local files
     // that do not exist on server
     let (client, url, local_data, file_id) =
-        http_sync::init_metadata_sync(url, &pool).await.unwrap();
+        client_http_sync::init_metadata_sync(url, &pool).await.unwrap();
 
 
 

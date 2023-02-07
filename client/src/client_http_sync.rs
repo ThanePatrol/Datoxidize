@@ -77,16 +77,18 @@ async fn get_new_files_for_client(
     blob: MetadataBlob,
 ) -> Vec<RemoteFile> {
     let update_state_url = create_post_required_files_url(parent_url);
-    println!("here");
 
-    client
+    let res = client
         .post(update_state_url)
         .json(&blob)
         .send()
         .await
         .unwrap();
 
+
+/*
     let get_files_url = create_get_files_init_url(parent_url);
+    println!("here at getting files");
     client
         .get(get_files_url)
         .send()
@@ -95,6 +97,9 @@ async fn get_new_files_for_client(
         .json()
         .await
         .unwrap()
+
+ */
+    Default::default()
 }
 
 fn create_get_metadata_url(parent_url: &Url) -> Url {

@@ -3,17 +3,18 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use common::file_utils::{FileMetadata, VaultMetadata};
+use common::file_utils::{FileMetadata, MetadataBlob, VaultMetadata};
 use common::{common_db_utils, file_utils, RemoteFile};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub async fn save_user_required_files(
     State(state): State<Arc<Mutex<ApiState>>>,
-    Json(payload): Json<Vec<FileMetadata>>,
+    Json(payload): Json<MetadataBlob>,
 ) -> impl IntoResponse {
     println!("client request: {:?}", payload);
-    state.lock().await.client_requested = payload;
+
+    state.lock().await.client_requested = payload.convert_to_metadata_vec();
     StatusCode::OK
 }
 

@@ -23,22 +23,12 @@ pub async fn init_metadata_load_into_db(
         let paths = file_utils::get_all_files_from_path(&vault_path)
             .expect(&*format!("Could not find paths: {:?}", vault_path));
 
-        println!("paths in init_metadata_load_into_db: {:?}", paths);
-
         remove_old_entries_from_db(pool).await?;
 
         let path_with_id = assign_file_ids(pool, paths, is_server).await?;
 
         let file_metadata =
             file_utils::get_file_metadata_from_path(path_with_id, root_dir, vault_path, vault_id);
-
-        //todo - use https://stackoverflow.com/questions/44419890/replacing-path-parts-in-rust
-        // to create absolute paths on both the server and the client
-        // server could potentially have a relative path but client should have absolute
-        // make sure to use https://doc.rust-lang.org/std/path/constant.MAIN_SEPARATOR.html
-        // instead of /
-        // strip prefix using .strip_prefix(), take the absolute path parent, add separator, add vault dir, add separator
-        // then add the rest of the content that was stripped
 
         upsert_database(pool, file_metadata).await?;
     }
@@ -243,7 +233,6 @@ pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut M
         for (vault_id, root_path) in root_dirs.iter() {
             if vault_id == id {
                 for file in metadata.files.iter_mut() {
-                    println!("remote_rot_dir: {:?}", file.absolute_root_dir);
                     let new_path = file_utils::convert_path_to_local(&file.full_path, &file.absolute_root_dir, root_path);
                     file.full_path = new_path;
                 }

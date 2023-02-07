@@ -101,7 +101,8 @@ fn router(api_state: Arc<Mutex<ApiState>>) -> Router {
             post(insert_new_metadata_into_db),
         )
         // POST /copy/client_needs receives a list of file metadata that the client needs from server
-        .route("/copy/client_needs", post(save_user_required_files))
+        .route("/copy/client_needs", 
+               post(save_user_required_files))
         // GET /copy/send_files_to_client_from_state will read from the api_state and return the list of files to the client
         .route(
             "/copy/send_files_to_client_from_state",

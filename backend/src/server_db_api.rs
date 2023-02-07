@@ -95,7 +95,6 @@ pub async fn insert_new_metadata_into_db(
 ) -> impl IntoResponse {
     let pool = &state.lock().await.pool;
 
-    println!("mdata {:?}", client_blob);
     let mut client = client_blob;
     convert_root_dirs_of_metadata(pool, &mut client)
         .await
@@ -152,7 +151,6 @@ async fn build_metadata_blob(pool: &Pool<Sqlite>) -> Result<MetadataBlob, sqlx::
 
 
         let files = map_metadata_query_to_blob(query, absolute_path);
-        println!("files: {:?}", files);
 
         let vault_md = VaultMetadata {
             files,

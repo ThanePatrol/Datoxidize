@@ -300,7 +300,6 @@ pub fn get_file_metadata_from_path(
     let mut files = Vec::new();
 
     for path in paths {
-        println!("path is: {:?}", path.1);
         let metadata =
             fs::metadata(&path.1).expect(&*format!("Error reading metadata from {:?}", path));
 
@@ -358,12 +357,10 @@ pub fn convert_path_to_local(
     remote_root: &PathBuf,
     local_root: &PathBuf,
 ) -> PathBuf {
-    println!("remote_file: {:?}, remote_root: {:?}, local_root: {:?}", remote_file, remote_root, local_root);
     let relative = remote_file.strip_prefix(remote_root).expect(&*format!(
         "Error stripping prefix of {:?} with {:?} - are the paths different?",
         remote_file, remote_root
     ));
-    println!("relative {:?}", relative);
     local_root.join(relative)
 }
 
