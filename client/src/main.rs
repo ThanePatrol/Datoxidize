@@ -52,9 +52,6 @@ async fn main() -> Result<()> {
 
 
 
-
-
-
     // send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
     //send_metadata_to_server(&client, url, local_data).await;
 
@@ -62,9 +59,6 @@ async fn main() -> Result<()> {
     //client_db_api::insert_server_metadata_into_client_db(&pool, &mut server_data).await.unwrap();
 
 
-
-
-    println!("here");
 
     //sync_logic::initial_sync(&dir_settings);
 

@@ -1,7 +1,7 @@
-use crate::config_utils::VaultConfig;
 pub use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::panic::resume_unwind;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
@@ -260,7 +260,7 @@ pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> 
 pub fn convert_blob_to_vec_metadata(blob: &mut MetadataBlob) -> Vec<FileMetadata> {
     let mut files = Vec::with_capacity(blob.vaults.len());
 
-    for (_, mut vault) in &mut blob.vaults {
+    for (_, vault) in &mut blob.vaults {
         files.append(&mut vault.files);
     }
 
@@ -358,21 +358,22 @@ pub fn convert_path_to_local(
     remote_root: &PathBuf,
     local_root: &PathBuf,
 ) -> PathBuf {
+    println!("remote_file: {:?}, remote_root: {:?}, local_root: {:?}", remote_file, remote_root, local_root);
     let relative = remote_file.strip_prefix(remote_root).expect(&*format!(
-        "Error stripping prefix of {:?} with {:?} - are the paths different",
+        "Error stripping prefix of {:?} with {:?} - are the paths different?",
         remote_file, remote_root
     ));
+    println!("relative {:?}", relative);
     local_root.join(relative)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[test]
     fn test_convert_path_to_local() {
-        let file = PathBuf::from("/home/root_dir/example_dir/file.txt");
+        let file = PathBuf::from("/home/root_dir/nested_dir/file.txt");
         let src = PathBuf::from("/home/root_dir");
         let dst = PathBuf::from("/home/different_root_dir");
 
@@ -380,49 +381,8 @@ mod tests {
 
         assert_eq!(
             result,
-            PathBuf::from("/home/different_root_dir/example_dir/file.txt")
+            PathBuf::from("/home/different_root_dir/nested_dir/file.txt")
         );
-    }
-
-    fn test_get_file_metadata_from_path() {
-        let vault_id = 0;
-        let path = String::from("common/test_resources/metadata/test_update_file_metadata.txt");
-        let path_buf = PathBuf::from(path);
-        let root_dir = String::from("common/test_resources/metadata/");
-        fs::File::create(&path_buf).unwrap();
-        let metadata = fs::metadata(&path_buf).unwrap();
-
-        let modified_time = metadata
-            .modified()
-            .expect(&*format!(
-                "Error reading modified metadata from {:?}",
-                &path_buf
-            ))
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        let file_size = metadata.len() as i64;
-
-        let file = FileMetadata {
-            full_path: path_buf.clone(),
-            root_directory: root_dir.clone(),
-            absolute_root_dir: Default::default(),
-            modified_time,
-            file_size,
-            vault_id: 0,
-            file_id: 0,
-            present_on_server: ServerPresent::Yes,
-        };
-
-        std::thread::sleep(Duration::from_secs(1));
-        fs::write(&path_buf, "some text").unwrap();
-        let now_modified = fs::metadata(&path_buf)
-            .unwrap()
-            .modified()
-            .unwrap()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
     }
 }
 

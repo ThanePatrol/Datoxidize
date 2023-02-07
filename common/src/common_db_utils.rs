@@ -243,6 +243,7 @@ pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut M
         for (vault_id, root_path) in root_dirs.iter() {
             if vault_id == id {
                 for file in metadata.files.iter_mut() {
+                    println!("remote_rot_dir: {:?}", file.absolute_root_dir);
                     let new_path = file_utils::convert_path_to_local(&file.full_path, &file.absolute_root_dir, root_path);
                     file.full_path = new_path;
                 }

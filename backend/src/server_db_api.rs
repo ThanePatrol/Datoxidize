@@ -95,6 +95,7 @@ pub async fn insert_new_metadata_into_db(
 ) -> impl IntoResponse {
     let pool = &state.lock().await.pool;
 
+    println!("mdata {:?}", client_blob);
     let mut client = client_blob;
     convert_root_dirs_of_metadata(pool, &mut client)
         .await
@@ -140,8 +141,6 @@ async fn build_metadata_blob(pool: &Pool<Sqlite>) -> Result<MetadataBlob, sqlx::
     };
 
 
-    println!("vaults: {:?}", vaults);
-
     for vault in vaults {
         let query: Vec<SqliteRow> = sqlx::query("select * from file_metadata where vault_id == ? ;")
             .bind(vault.0)
@@ -150,6 +149,7 @@ async fn build_metadata_blob(pool: &Pool<Sqlite>) -> Result<MetadataBlob, sqlx::
 
         //absolute root path for the specific vault
         let absolute_path = PathBuf::from(vault.1);
+
 
         let files = map_metadata_query_to_blob(query, absolute_path);
         println!("files: {:?}", files);

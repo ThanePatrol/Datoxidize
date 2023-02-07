@@ -27,13 +27,16 @@ pub async fn init_metadata_sync(
     let get_metadata_url = create_get_metadata_url(&url);
     let (file_id, server_metadata) = get_metadata_from_server(&client, get_metadata_url).await;
 
+
     // Gets local metadata from DB - Also updates file id's to newest
     let post_metadata_url = create_post_metadata_url(&url);
     let local_metadata = load_file_metadata(pool, file_id).await?;
 
+
     // Gets metadata diff and sends it to server which is then inserted into db
     let metadata_diff = file_utils::get_metadata_diff(local_metadata, server_metadata);
     let (client_new, server_new) = metadata_diff.destruct_into_tuple();
+
     let metadata_diff_url = create_post_metadata_diff_url(&url);
     post_metadata_diff_to_server(&client, metadata_diff_url, server_new).await;
 
