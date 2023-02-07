@@ -136,6 +136,9 @@ async fn assign_file_ids(
 ) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
     let mut paths_with_ids = Vec::new();
 
+    //NB this most recent file_id - 1 as we increment file id then assign it in the match statement
+    let mut most_recent_id = get_next_id(pool).await? - 1;
+
     for path in paths {
         let row = sqlx::query("select file_id from file_metadata where file_path == ?")
             .bind(path.to_str().unwrap())
@@ -146,7 +149,10 @@ async fn assign_file_ids(
         if is_server {
             file_id = match row {
                 Ok(r) => r.get::<i32, _>(0),
-                Err(_) => get_next_id(pool).await?,
+                Err(_) => {
+                    most_recent_id += 1;
+                    most_recent_id
+                },
             }
         } else {
             file_id = match row {
@@ -244,5 +250,50 @@ pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut M
         }
     }
 
+    Ok(())
+}
+
+pub async fn delete_db_and_recreate(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let _ = sqlx::query("drop table file_metadata;")
+        .execute(pool)
+        .await?;
+
+
+    let _ = sqlx::query("CREATE TABLE file_metadata
+    (
+    file_id        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    vault_id       INTEGER                           NOT NULL,
+    file_path      TEXT UNIQUE                       NOT NULL,
+    root_directory TEXT                              NOT NULL,
+    modified_time  BIGINT                            NOT NULL,
+    file_size      BIGINT                            NOT NULL
+    );")
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn select_all_from_file_metadata(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let rows = sqlx::query("select * from file_metadata;")
+        .fetch_all(pool)
+        .await?;
+
+    for row in rows {
+        let mut s = "".to_string();
+        s.push_str(&*row.get::<i64, _>(0).to_string());
+        s.push_str(", ");
+        s.push_str(&*row.get::<i64, _>(1).to_string());
+        s.push_str(", ");
+        s.push_str(&*row.get::<String, _>(2));
+        s.push_str(", ");
+        s.push_str(&*row.get::<String, _>(3));
+        s.push_str(", ");
+        s.push_str(&*row.get::<i64, _>(4).to_string());
+        s.push_str(", ");
+        s.push_str(&*row.get::<i64, _>(5).to_string());
+
+        println!("{:?}", s)
+    }
     Ok(())
 }

@@ -24,6 +24,13 @@ async fn main() -> Result<()> {
             .unwrap())
         .await
         .unwrap();
+
+    println!("database was: ");
+    common_db_utils::select_all_from_file_metadata(&pool).await.unwrap();
+
+    common_db_utils::delete_db_and_recreate(&pool).await.unwrap();
+    println!("recreated db");
+
     tokio::task::spawn_blocking(move || {
         common_db_utils::init_metadata_load_into_db(&pool2, false).unwrap();
     })

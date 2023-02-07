@@ -193,6 +193,10 @@ fn map_metadata_query_to_blob(rows: Vec<SqliteRow>, absolute_root_dir: PathBuf) 
     result
 }
 
+
+
+
+
 /*
 /// Meant for testing, populate the db with some dummy data to use
 pub async fn add_files_to_db(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
