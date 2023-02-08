@@ -125,6 +125,19 @@ impl VaultMetadata {
             }
         }
 
+        // Checks if file_id matches any client files, if not the client needs it
+        for server_file in server.files.iter() {
+            let mut present = false;
+            for client_file in self.files.iter() {
+                if server_file.file_id == client_file.file_id {
+                    present = true;
+                }
+            }
+            if !present {
+                new_for_client.files.push(server_file.clone());
+            }
+        }
+
         (new_for_client, new_for_server)
     }
 
@@ -222,8 +235,10 @@ pub fn get_metadata_diff(client: MetadataBlob, server: MetadataBlob) -> Metadata
     for client_vault in client_vaults.into_iter() {
         let vault_id = client_vault.0;
         let server_vault = server.vaults.get(&vault_id).unwrap();
+
         let (client_differences, server_differences) =
             client_vault.1.get_differences_from_server(server_vault);
+
         metadata_diff
             .new_for_client
             .insert(vault_id, client_differences);

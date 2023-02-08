@@ -21,9 +21,9 @@ pub async fn save_user_required_files(
 pub async fn get_remote_files_for_client(
     State(state): State<Arc<Mutex<ApiState>>>,
 ) -> impl IntoResponse {
-    let pool = &state.lock().await.pool;
-    let metadata = &state.lock().await.client_requested;
-    let files = common_db_utils::get_file_contents_from_metadata(pool, &metadata).await;
+    let state = &state.lock().await;
+    let files = common_db_utils::get_file_contents_from_metadata(&state.pool, &state.client_requested).await;
+    Json(files)
 }
 
 /*-----------------------------OLD STUFF BELOW-----------------------------------------*/

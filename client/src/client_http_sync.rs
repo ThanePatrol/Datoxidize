@@ -32,14 +32,9 @@ pub async fn init_metadata_sync(
     let post_metadata_url = create_post_metadata_url(&url);
     let local_metadata = load_file_metadata(pool, file_id).await?;
 
-    //todo - determine server_metadata is marking files as present on server even when they are only present in db
-    println!("server_metadata: {:?}", server_metadata);
-
     // Gets metadata diff and sends it to server which is then inserted into db
     let metadata_diff = file_utils::get_metadata_diff(local_metadata, server_metadata);
 
-    //todo - determine why client_new is empty when there are new files to send - may be related to server presence
-    println!("metadata_diff: {:?}", metadata_diff);
     let (client_new, server_new) = metadata_diff.destruct_into_tuple();
 
     let metadata_diff_url = create_post_metadata_diff_url(&url);
@@ -84,6 +79,7 @@ async fn get_new_files_for_client(
 ) -> Vec<RemoteFile> {
     let update_state_url = create_post_required_files_url(parent_url);
 
+    //sends a message to the server, updating the state with the list of files required
     client
         .post(update_state_url)
         .json(&blob)
@@ -91,13 +87,16 @@ async fn get_new_files_for_client(
         .await
         .unwrap();
 
-
+    println!("here");
+    //requests for the files from the server (files not present on client)
     let get_files_url = create_get_files_init_url(parent_url);
-    client
+    let res = client
         .get(get_files_url)
         .send()
         .await
-        .unwrap()
+        .unwrap();
+    println!("{:?}", res);
+    res
         .json()
         .await
         .unwrap()

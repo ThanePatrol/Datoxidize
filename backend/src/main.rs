@@ -1,11 +1,11 @@
 mod html_creation;
 mod server_db_api;
-mod sync_core;
+mod server_sync_core;
 
 use crate::server_db_api::{
     get_metadata_blob, get_metadata_differences, insert_new_metadata_into_db,
 };
-use crate::sync_core::{get_remote_files_for_client, save_user_required_files};
+use crate::server_sync_core::{get_remote_files_for_client, save_user_required_files};
 use axum::extract::State;
 use axum::middleware::AddExtension;
 use axum::{

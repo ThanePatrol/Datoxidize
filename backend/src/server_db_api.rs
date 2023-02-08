@@ -184,7 +184,10 @@ fn map_metadata_query_to_blob(rows: Vec<SqliteRow>, absolute_root_dir: PathBuf) 
                 file_size,
                 vault_id,
                 file_id,
-                present_on_server: ServerPresent::Yes,
+                present_on_server: match PathBuf::from(file_path).exists() {
+                    true => ServerPresent::Yes,
+                    false => ServerPresent::No
+                },
             };
             result.push(file.clone());
         });
