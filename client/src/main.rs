@@ -46,8 +46,7 @@ async fn main() -> Result<()> {
     // local_metadata is read from db, server_data is retrieved from server
     // file_id is the latest key from the servers db, used to update local files
     // that do not exist on server
-    let (client, url, local_data, file_id) =
-        client_http_sync::init_metadata_sync(url, &pool).await.unwrap();
+    client_http_sync::init_metadata_sync(url, &pool).await.unwrap();
 
 
 

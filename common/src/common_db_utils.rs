@@ -179,7 +179,9 @@ pub async fn get_file_contents_from_metadata(
 
         let file = RemoteFile::new(
             path,
+            data.absolute_root_dir.clone(),
             data.root_directory.clone(),
+
             data.vault_id,
             data.file_id,
         );
@@ -207,7 +209,7 @@ async fn get_file_paths_from_id(
 /// /home/root/storage/vault0
 /// /home/root/storage/vault1
 /// The function will return a vec of pathbufs eg: ["/home/root/storage/vault0", "/home/root/storage/vault1"]
-async fn get_root_local_root_directory(pool: &Pool<Sqlite>) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
+pub async fn get_vault_id_and_root_directories(pool: &Pool<Sqlite>) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
     let root_paths = sqlx::query("select vault_id, abs_path from vaults;")
         .fetch_all(pool)
         .await?;
@@ -227,7 +229,7 @@ async fn get_root_local_root_directory(pool: &Pool<Sqlite>) -> Result<Vec<(i32, 
 /// Iterates through a metadata blob - finds matching vaults then updates all the paths from the metadatablob
 /// to the correct path for the server using file_utils
 pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut MetadataBlob) -> Result<(), sqlx::Error> {
-    let root_dirs = get_root_local_root_directory(pool).await?;
+    let root_dirs = get_vault_id_and_root_directories(pool).await?;
 
     for (id, metadata) in metadata.vaults.iter_mut() {
         for (vault_id, root_path) in root_dirs.iter() {

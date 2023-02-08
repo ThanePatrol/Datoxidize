@@ -1,7 +1,7 @@
 use crate::client_db_api::load_file_metadata;
 use axum::http;
 use common::config_utils::{DirectoryConfig, VaultConfig};
-use common::file_utils;
+use common::{common_db_utils, file_utils};
 use common::file_utils::{FileMetadata, MetadataBlob, MetadataDiff};
 use common::RemoteFile;
 use http::StatusCode;
@@ -20,7 +20,7 @@ use tokio::sync::Barrier;
 pub async fn init_metadata_sync(
     url: Url,
     pool: &Pool<Sqlite>,
-) -> Result<(Client, Url, Vec<RemoteFile>, i32), sqlx::Error> {
+) -> Result<(), sqlx::Error> {
     let client = Client::new();
 
     // Gets metadata from server via http
@@ -43,12 +43,13 @@ pub async fn init_metadata_sync(
 
     // requests for files from server to update and/or add
     let files = get_new_files_for_client(&client, &url, client_new).await;
+    let vault_and_root_paths = common_db_utils::get_vault_id_and_root_directories(pool).await?;
+    file_utils::save_remote_files_to_disk(files, vault_and_root_paths);
 
     //todo - send files required for server to the server
 
-    println!("Files received from server: {:?}", files);
 
-    Ok((client, post_metadata_url, files, file_id))
+    Ok(())
 }
 
 pub async fn send_metadata_to_server(client: &Client, url: Url, blob: MetadataBlob) {
@@ -87,16 +88,13 @@ async fn get_new_files_for_client(
         .await
         .unwrap();
 
-    println!("here");
     //requests for the files from the server (files not present on client)
     let get_files_url = create_get_files_init_url(parent_url);
-    let res = client
+    client
         .get(get_files_url)
         .send()
         .await
-        .unwrap();
-    println!("{:?}", res);
-    res
+        .unwrap()
         .json()
         .await
         .unwrap()

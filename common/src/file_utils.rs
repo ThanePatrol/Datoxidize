@@ -1,9 +1,11 @@
 pub use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs;
 use std::panic::resume_unwind;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
+use rayon::prelude::*;
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
@@ -13,16 +15,24 @@ use std::time::UNIX_EPOCH;
 pub struct RemoteFile {
     pub full_path: PathBuf,
     pub root_directory: String,
+    pub absolute_root_dir: PathBuf,
     pub contents: Vec<u8>,
     pub vault_id: i32,
     pub file_id: i32,
 }
 
 impl RemoteFile {
-    pub fn new(path: PathBuf, root_dir: String, vault_id: i32, file_id: i32) -> Self {
+    pub fn new(
+        path: PathBuf,
+        absolute_root_dir: PathBuf,
+        root_dir: String,
+        vault_id: i32,
+        file_id: i32,
+    ) -> Self {
         RemoteFile {
             full_path: path.clone(),
             root_directory: root_dir,
+            absolute_root_dir,
             contents: fs::read(path).unwrap(),
             vault_id,
             file_id,
@@ -34,6 +44,7 @@ impl RemoteFile {
         RemoteFile {
             full_path: path.clone(),
             root_directory: root_dir,
+            absolute_root_dir: Default::default(),
             contents: vec![],
             vault_id,
             file_id,
@@ -65,6 +76,7 @@ impl MetadataBlob {
         }
         files
     }
+
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -84,6 +96,7 @@ impl MetadataDiff {
             },
         )
     }
+
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -250,7 +263,6 @@ pub fn get_metadata_diff(client: MetadataBlob, server: MetadataBlob) -> Metadata
     metadata_diff
 }
 
-
 /// Convenience function to read all files in all subdirs of a supplied path
 pub fn get_all_files_from_path(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
     fn recursive_walk(path: &PathBuf, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
@@ -377,6 +389,31 @@ pub fn convert_path_to_local(
         remote_file, remote_root
     ));
     local_root.join(relative)
+}
+
+/// Goes through a vec of remote files, converts their path to work on the local system
+/// and saves to disk
+/// done in parallel for greater speed
+pub fn save_remote_files_to_disk(
+    files: Vec<RemoteFile>,
+    id_and_root_dirs: Vec<(i32, PathBuf)>
+) {
+    let iter = files.into_par_iter();
+    let _ = iter.for_each(|file| {
+        let mut local_root = &Default::default();
+        //find matching vault while this is double work, the expected number of vaults shouldn't be
+        // high enough to cause an issue
+        for (id, local_r) in id_and_root_dirs.iter() {
+            if *id == file.vault_id {
+                local_root = local_r;
+                break;
+            }
+        }
+
+        let local_path = convert_path_to_local(&file.full_path, &file.absolute_root_dir, local_root);
+        fs::write(&local_path, file.contents)
+            .expect(&*format!("Error writing {} to disk", local_path.display()));
+    });
 }
 
 #[cfg(test)]
