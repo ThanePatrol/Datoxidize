@@ -5,7 +5,7 @@ mod server_sync_core;
 use crate::server_db_api::{
     get_metadata_blob, get_metadata_differences, insert_new_metadata_into_db,
 };
-use crate::server_sync_core::{get_remote_files_for_client, save_user_required_files};
+use crate::server_sync_core::{get_remote_files_for_client, receive_files_from_client, save_user_required_files};
 use axum::extract::State;
 use axum::middleware::AddExtension;
 use axum::{
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    common_db_utils::delete_db_and_recreate(&pool)
+    common_db_utils::delete_db_and_recreate_for_server(&pool)
         .await
         .unwrap();
     println!("recreated db");
@@ -101,12 +101,16 @@ fn router(api_state: Arc<Mutex<ApiState>>) -> Router {
             post(insert_new_metadata_into_db),
         )
         // POST /copy/client_needs receives a list of file metadata that the client needs from server
-        .route("/copy/client_needs", 
-               post(save_user_required_files))
+        .route("/copy/client_needs", post(save_user_required_files))
         // GET /copy/send_files_to_client_from_state will read from the api_state and return the list of files to the client
         .route(
             "/copy/send_files_to_client_from_state",
             get(get_remote_files_for_client),
+        )
+        // POST /copy/receive_files_from_client accepts a list of files from the client and serializes them
+        .route(
+            "/copy/receive_files_from_client",
+            post(receive_files_from_client)
         )
         .with_state(api_state)
 }

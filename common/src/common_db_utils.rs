@@ -142,7 +142,7 @@ async fn assign_file_ids(
                 Err(_) => {
                     most_recent_id += 1;
                     most_recent_id
-                },
+                }
             }
         } else {
             file_id = match row {
@@ -167,21 +167,31 @@ async fn get_next_id(pool: &Pool<Sqlite>) -> Result<i32, sqlx::Error> {
 
 /// Used for getting the actual file contents from metadata
 /// File path is stored in the database, hence the pool
-pub async fn get_file_contents_from_metadata(
+pub async fn read_file_contents_from_disk_and_metadata(
     pool: &Pool<Sqlite>,
     metadata: &Vec<FileMetadata>,
 ) -> Vec<RemoteFile> {
     let mut files = Vec::with_capacity(metadata.len());
     for data in metadata {
-        let path = get_file_paths_from_id(pool, &data)
-            .await
-            .expect(&*format!("Error reading {:?}", data));
+
+        let path = match get_file_paths_from_id(pool, &data)
+            .await {
+            Ok(p) => p,
+            Err(e) => {
+                println!("Error: {e}");
+                continue
+            },
+        };
+
+
+        if !path.exists() {
+            continue
+        }
 
         let file = RemoteFile::new(
             path,
             data.absolute_root_dir.clone(),
             data.root_directory.clone(),
-
             data.vault_id,
             data.file_id,
         );
@@ -209,7 +219,9 @@ async fn get_file_paths_from_id(
 /// /home/root/storage/vault0
 /// /home/root/storage/vault1
 /// The function will return a vec of pathbufs eg: ["/home/root/storage/vault0", "/home/root/storage/vault1"]
-pub async fn get_vault_id_and_root_directories(pool: &Pool<Sqlite>) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
+pub async fn get_vault_id_and_root_directories(
+    pool: &Pool<Sqlite>,
+) -> Result<Vec<(i32, PathBuf)>, sqlx::Error> {
     let root_paths = sqlx::query("select vault_id, abs_path from vaults;")
         .fetch_all(pool)
         .await?;
@@ -217,7 +229,6 @@ pub async fn get_vault_id_and_root_directories(pool: &Pool<Sqlite>) -> Result<Ve
     let root_paths = root_paths
         .iter()
         .map(|row| {
-
             let raw_string = row.get::<String, _>(1);
 
             (row.get::<i32, _>(0), PathBuf::from(raw_string))
@@ -228,14 +239,21 @@ pub async fn get_vault_id_and_root_directories(pool: &Pool<Sqlite>) -> Result<Ve
 
 /// Iterates through a metadata blob - finds matching vaults then updates all the paths from the metadatablob
 /// to the correct path for the server using file_utils
-pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut MetadataBlob) -> Result<(), sqlx::Error> {
+pub async fn convert_root_dirs_of_metadata(
+    pool: &Pool<Sqlite>,
+    metadata: &mut MetadataBlob,
+) -> Result<(), sqlx::Error> {
     let root_dirs = get_vault_id_and_root_directories(pool).await?;
 
     for (id, metadata) in metadata.vaults.iter_mut() {
         for (vault_id, root_path) in root_dirs.iter() {
             if vault_id == id {
                 for file in metadata.files.iter_mut() {
-                    let new_path = file_utils::convert_path_to_local(&file.full_path, &file.absolute_root_dir, root_path);
+                    let new_path = file_utils::convert_path_to_local(
+                        &file.full_path,
+                        &file.absolute_root_dir,
+                        root_path,
+                    );
                     file.full_path = new_path;
                 }
             }
@@ -245,13 +263,13 @@ pub async fn convert_root_dirs_of_metadata(pool: &Pool<Sqlite>, metadata: &mut M
     Ok(())
 }
 
-pub async fn delete_db_and_recreate(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+pub async fn delete_db_and_recreate_for_server(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     let _ = sqlx::query("drop table file_metadata;")
         .execute(pool)
         .await?;
 
-
-    let _ = sqlx::query("CREATE TABLE file_metadata
+    let _ = sqlx::query(
+        "CREATE TABLE file_metadata
     (
     file_id        INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     vault_id       INTEGER                           NOT NULL,
@@ -259,9 +277,32 @@ pub async fn delete_db_and_recreate(pool: &Pool<Sqlite>) -> Result<(), sqlx::Err
     root_directory TEXT                              NOT NULL,
     modified_time  BIGINT                            NOT NULL,
     file_size      BIGINT                            NOT NULL
-    );")
+    );",
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_db_and_recreate_for_client(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let _ = sqlx::query("drop table file_metadata;")
         .execute(pool)
         .await?;
+
+    let _ = sqlx::query(
+        "CREATE TABLE file_metadata
+    (
+    file_id        INTEGER                           NOT NULL,
+    vault_id       INTEGER                           NOT NULL,
+    file_path      TEXT UNIQUE                       NOT NULL,
+    root_directory TEXT                              NOT NULL,
+    modified_time  BIGINT                            NOT NULL,
+    file_size      BIGINT                            NOT NULL
+    );",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

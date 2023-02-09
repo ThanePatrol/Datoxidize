@@ -3,7 +3,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use common::file_utils::{FileMetadata, MetadataBlob, VaultMetadata};
+use common::file_utils::{FileMetadata, MetadataBlob, ServerPresent};
 use common::{common_db_utils, file_utils, RemoteFile};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -13,8 +13,13 @@ pub async fn save_user_required_files(
     Json(payload): Json<MetadataBlob>,
 ) -> impl IntoResponse {
     println!("client request: {:?}", payload);
+    let payload_on_server= payload
+        .convert_to_metadata_vec()
+        .into_iter()
+        .filter(|files| files.present_on_server == ServerPresent::Yes)
+        .collect::<Vec<FileMetadata>>();
 
-    state.lock().await.client_requested = payload.convert_to_metadata_vec();
+    state.lock().await.client_requested = payload_on_server;
     StatusCode::OK
 }
 
@@ -22,8 +27,22 @@ pub async fn get_remote_files_for_client(
     State(state): State<Arc<Mutex<ApiState>>>,
 ) -> impl IntoResponse {
     let state = &state.lock().await;
-    let files = common_db_utils::get_file_contents_from_metadata(&state.pool, &state.client_requested).await;
+    let files =
+        common_db_utils::read_file_contents_from_disk_and_metadata(&state.pool, &state.client_requested)
+            .await;
     Json(files)
+}
+
+pub async fn receive_files_from_client(
+    State(state): State<Arc<Mutex<ApiState>>>,
+    Json(payload): Json<Vec<RemoteFile>>
+) -> impl IntoResponse {
+    let state = &state.lock().await;
+    let vault_and_root_paths = common_db_utils::get_vault_id_and_root_directories(&state.pool)
+        .await
+        .expect(&*format!("Error reading from database with {:?}", payload));
+    file_utils::save_remote_files_to_disk(payload, vault_and_root_paths);
+    StatusCode::OK
 }
 
 /*-----------------------------OLD STUFF BELOW-----------------------------------------*/

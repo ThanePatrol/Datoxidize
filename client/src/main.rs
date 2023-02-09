@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     println!("database was: ");
     common_db_utils::select_all_from_file_metadata(&pool).await.unwrap();
 
-    common_db_utils::delete_db_and_recreate(&pool).await.unwrap();
+    common_db_utils::delete_db_and_recreate_for_client(&pool).await.unwrap();
     println!("recreated db");
 
     tokio::task::spawn_blocking(move || {
@@ -47,8 +47,6 @@ async fn main() -> Result<()> {
     // file_id is the latest key from the servers db, used to update local files
     // that do not exist on server
     client_http_sync::init_metadata_sync(url, &pool).await.unwrap();
-
-
 
 
     // send_metadata_to_server needs to be called after the initial sync to ensure threads are joined
