@@ -1,11 +1,9 @@
 use rayon::prelude::*;
 pub use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
-use std::panic::resume_unwind;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{UNIX_EPOCH};
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
@@ -67,6 +65,7 @@ pub enum ServerPresent {
 pub struct MetadataBlob {
     pub vaults: HashMap<i32, VaultMetadata>,
 }
+
 impl MetadataBlob {
     pub fn convert_to_metadata_vec(self) -> Vec<FileMetadata> {
         let mut files = Vec::with_capacity(self.vaults.len() * 5);
@@ -97,6 +96,33 @@ impl MetadataDiff {
                 vaults: self.new_for_server,
             },
         )
+    }
+
+    /// Convenience function for printing a pretty string from a Metadata Diff struct
+    pub fn get_pretty_string(&self) -> (String, String) {
+        let mut client_contents = String::from("client: ");
+        let mut server_contents = String::from("server: ");
+
+        for entry in self.new_for_client.iter() {
+            for vault in &entry.1.files {
+                client_contents.push_str("path { ");
+                client_contents.push_str(vault.full_path.to_str().unwrap());
+                client_contents.push_str(" }, modified { ");
+                client_contents.push_str(vault.modified_time.to_string().as_str());
+                client_contents.push_str(" }, ");
+            }
+        }
+
+        for entry in self.new_for_server.iter() {
+            for vault in &entry.1.files {
+                server_contents.push_str("path { ");
+                server_contents.push_str(vault.full_path.to_str().unwrap());
+                server_contents.push_str(" }, modified { ");
+                server_contents.push_str(vault.modified_time.to_string().as_str());
+                server_contents.push_str(" }");
+            }
+        }
+        (client_contents, server_contents)
     }
 }
 
@@ -130,8 +156,8 @@ impl VaultMetadata {
             let mut present = false;
             let client_path_in_server_format = convert_path_to_local(
                 &client_file.full_path,
-            &client_file.absolute_root_dir,
-            &server.files[0].absolute_root_dir);
+                &client_file.absolute_root_dir,
+                &server.files[0].absolute_root_dir);
 
 
             for server_file in server.files.iter() {
@@ -153,8 +179,6 @@ impl VaultMetadata {
             if !present {
                 new_for_server.files.push(client_file.clone());
             }
-
-
         }
 
 
@@ -175,7 +199,6 @@ impl VaultMetadata {
                 new_for_client.files.push(server_file.clone());
             }
         }
-
 
 
         (new_for_client, new_for_server)
@@ -450,7 +473,7 @@ fn set_modified_time(path: &PathBuf, modified_time: i64) {
     println!("set {:?} modified time to {modified_time}", path);
     filetime::set_file_mtime(
         path,
-        filetime::FileTime::from_unix_time(modified_time,0),
+        filetime::FileTime::from_unix_time(modified_time, 0),
     )
         .unwrap()
 }
@@ -472,26 +495,73 @@ mod tests {
             PathBuf::from("/home/different_root_dir/nested_dir/file.txt")
         );
     }
+
+    #[test]
+    fn test_check_metadata_difference() {
+
+        let client_mdata = VaultMetadata {
+            files: vec![
+                FileMetadata {
+                    full_path: PathBuf::from("/home/sync_dir/nested/memes1.txt"),
+                    root_directory: "sync_dir".to_string(),
+                    absolute_root_dir: PathBuf::from("/home/sync_dir/"),
+                    modified_time: 1_000_000_000_000,
+                    file_size: 10,
+                    vault_id: 0,
+                    file_id: 1,
+                    present_on_server: ServerPresent::Yes,
+                },
+                FileMetadata {
+                    full_path: PathBuf::from("/home/sync_dir/nested/memes2.txt"),
+                    root_directory: "sync_dir".to_string(),
+                    absolute_root_dir: PathBuf::from("/home/sync_dir/"),
+                    modified_time: 2_000_000_000_000,
+                    file_size: 10,
+                    vault_id: 0,
+                    file_id: -1,
+                    present_on_server: ServerPresent::No,
+                },
+            ],
+            vault_id: 0,
+        };
+
+        let server_mdata = VaultMetadata {
+            files: vec![FileMetadata {
+                full_path: PathBuf::from("/other_home/sync_dir/nested/memes1.txt"),
+                root_directory: "sync_dir".to_string(),
+                absolute_root_dir: PathBuf::from("/other_home/sync_dir/"),
+                modified_time: 1_000_000_000_001,
+                file_size: 10,
+                vault_id: 0,
+                file_id: 1,
+                present_on_server: ServerPresent::Yes,
+            }, FileMetadata {
+                full_path: PathBuf::from("/other_home/sync_dir/nested/memes3.txt"),
+                root_directory: "sync_dir".to_string(),
+                absolute_root_dir: PathBuf::from("/other_home/sync_dir/"),
+                modified_time: 2_000_000_000_000,
+                file_size: 10,
+                vault_id: 0,
+                file_id: 2,
+                present_on_server: ServerPresent::Yes,
+            }],
+            vault_id: 0,
+        };
+
+        let client_metadata_blob = MetadataBlob {
+            vaults: HashMap::from([(0, client_mdata)]),
+        };
+
+        let server_metadata_blob = MetadataBlob {
+            vaults: HashMap::from([(0, server_mdata)]),
+        };
+
+        let diff = get_metadata_diff(client_metadata_blob, server_metadata_blob);
+        let (client, server) = diff.get_pretty_string();
+
+        assert!(client.contains("memes1.txt"));
+        assert!(client.contains("memes3.txt"));
+        assert!(server.contains("memes2.txt"));
+    }
 }
 
-/*
-//todo - implement diff_copy to only sync differences
-/// saves the file to the server, if the directory is not present, create it
-pub async fn copy_file_to_server(client_file: &RemoteFile, vault_config: &VaultConfig) -> Result<(), Box<dyn Error>> {
-    let full_path = get_server_path(client_file, vault_config);
-    //todo - handle parent option error by logging
-    let directory = full_path.parent().unwrap();
-
-    fs::create_dir_all(directory)?;
-    fs::write(&full_path, &client_file.contents)?;
-
-    filetime::set_file_times(
-        full_path,
-        FileTime::from_system_time(*&client_file.metadata.0),
-        FileTime::from_system_time(*&client_file.metadata.1))?;
-
-    Ok(())
-}
-
-
- */
