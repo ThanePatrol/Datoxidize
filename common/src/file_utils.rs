@@ -123,29 +123,51 @@ impl VaultMetadata {
         };
 
         for client_file in self.files.iter() {
-            if client_file.present_on_server == ServerPresent::No {
-                new_for_server.files.push(client_file.clone());
-                continue;
-            }
+            //if client_file.present_on_server == ServerPresent::No {
+            //    new_for_server.files.push(client_file.clone());
+            //    continue;
+            //}
+            let mut present = false;
+            let client_path_in_server_format = convert_path_to_local(
+                &client_file.full_path,
+            &client_file.absolute_root_dir,
+            &server.files[0].absolute_root_dir);
+
 
             for server_file in server.files.iter() {
-                // is client file newer than server file
-                if client_file.compare_to(&server_file) == 1 {
-                    new_for_server.files.push(client_file.clone());
-                }
-                //is server file newer than client file
-                else if client_file.compare_to(&server_file) == -1 {
-                    new_for_client.files.push(server_file.clone())
+                //make sure we are comparing same file
+                if client_path_in_server_format == server_file.full_path {
+                    println!("comparing {:?} and {:?}", client_file, server_file);
+                    // is client file newer than server file
+                    if client_file.compare_to(&server_file) == 1 {
+                        new_for_server.files.push(client_file.clone());
+                    }
+                    //is server file newer than client file
+                    else if client_file.compare_to(&server_file) == -1 {
+                        new_for_client.files.push(server_file.clone())
+                    }
+
+                    present = true;
                 }
             }
+            if !present {
+                new_for_server.files.push(client_file.clone());
+            }
+
+
         }
 
-        /*
+
         // Checks if file_id matches any client files, if not the client needs it
         for server_file in server.files.iter() {
             let mut present = false;
+            let server_path_in_client_format = convert_path_to_local(
+                &server_file.full_path,
+                &server_file.absolute_root_dir,
+                &self.files[0].absolute_root_dir);
+
             for client_file in self.files.iter() {
-                if server_file.file_id == client_file.file_id {
+                if server_path_in_client_format == client_file.full_path {
                     present = true;
                 }
             }
@@ -154,7 +176,7 @@ impl VaultMetadata {
             }
         }
 
-         */
+
 
         (new_for_client, new_for_server)
     }
@@ -239,6 +261,7 @@ impl FileMetadata {
     }
 }
 
+//todo unit test me!!!!!
 /// Sorts through all files, finds the newest files for both client and server and
 /// returns it in a MetadataDiff struct
 /// As the client will most likely have less vaults than the server, iterate through the client vaults
@@ -424,9 +447,10 @@ pub fn save_remote_files_to_disk(files: Vec<RemoteFile>, id_and_root_dirs: Vec<(
 
 /// Update the metadata to ensure file won't be synced unnecessarily
 fn set_modified_time(path: &PathBuf, modified_time: i64) {
+    println!("set {:?} modified time to {modified_time}", path);
     filetime::set_file_mtime(
         path,
-        filetime::FileTime::from_unix_time(modified_time, 0),
+        filetime::FileTime::from_unix_time(modified_time,0),
     )
         .unwrap()
 }

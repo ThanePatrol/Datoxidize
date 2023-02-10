@@ -28,7 +28,7 @@ pub async fn init_metadata_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sql
     println!("new for client: {:?}", new_for_client);
     println!("new for server: {:?}", new_for_server);
 
-    upsert_database(pool, new_for_client.clone().convert_to_metadata_vec()).await?;
+    //upsert_database(pool, new_for_client.clone().convert_to_metadata_vec()).await?;
 
     post_metadata_diff_to_server(&client, &url, &new_for_server).await;
 
