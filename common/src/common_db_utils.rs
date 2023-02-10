@@ -11,7 +11,7 @@ use std::path::PathBuf;
 /// could be separated by feeding in the queries but simpler to have a tighter dependence
 /// Assumes table called vaults
 #[tokio::main]
-pub async fn init_metadata_load_into_db(
+pub async fn init_metadata_into_db(
     pool: &Pool<Sqlite>,
     is_server: bool,
 ) -> Result<(), sqlx::Error> {
@@ -194,6 +194,7 @@ pub async fn read_file_contents_from_disk_and_metadata(
             data.root_directory.clone(),
             data.vault_id,
             data.file_id,
+            data.modified_time
         );
         files.push(file);
     }

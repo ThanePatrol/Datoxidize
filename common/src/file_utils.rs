@@ -1,11 +1,11 @@
+use rayon::prelude::*;
 pub use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::panic::resume_unwind;
 use std::path::PathBuf;
-use std::time::UNIX_EPOCH;
-use rayon::prelude::*;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Metadata tuple format: (access_time, modified_time, file_size_bytes)
 /// Modified time should be identical and latency with networks can cause different times
@@ -19,6 +19,7 @@ pub struct RemoteFile {
     pub contents: Vec<u8>,
     pub vault_id: i32,
     pub file_id: i32,
+    pub modified_time: i64,
 }
 
 impl RemoteFile {
@@ -28,6 +29,7 @@ impl RemoteFile {
         root_dir: String,
         vault_id: i32,
         file_id: i32,
+        modified_time: i64,
     ) -> Self {
         RemoteFile {
             full_path: path.clone(),
@@ -36,6 +38,7 @@ impl RemoteFile {
             contents: fs::read(path).unwrap(),
             vault_id,
             file_id,
+            modified_time,
         }
     }
 
@@ -48,6 +51,7 @@ impl RemoteFile {
             contents: vec![],
             vault_id,
             file_id,
+            modified_time: 0,
         }
     }
 }
@@ -59,11 +63,10 @@ pub enum ServerPresent {
     Unknown,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MetadataBlob {
     pub vaults: HashMap<i32, VaultMetadata>,
 }
-
 impl MetadataBlob {
     pub fn convert_to_metadata_vec(self) -> Vec<FileMetadata> {
         let mut files = Vec::with_capacity(self.vaults.len() * 5);
@@ -76,7 +79,6 @@ impl MetadataBlob {
         }
         files
     }
-
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -96,10 +98,9 @@ impl MetadataDiff {
             },
         )
     }
-
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct VaultMetadata {
     pub files: Vec<FileMetadata>,
     pub vault_id: i32,
@@ -128,16 +129,18 @@ impl VaultMetadata {
             }
 
             for server_file in server.files.iter() {
+                // is client file newer than server file
                 if client_file.compare_to(&server_file) == 1 {
-                    // is client file newer than server file
                     new_for_server.files.push(client_file.clone());
-                } else if client_file.compare_to(&server_file) == -1 {
-                    //is server file newer than client file
+                }
+                //is server file newer than client file
+                else if client_file.compare_to(&server_file) == -1 {
                     new_for_client.files.push(server_file.clone())
                 }
             }
         }
 
+        /*
         // Checks if file_id matches any client files, if not the client needs it
         for server_file in server.files.iter() {
             let mut present = false;
@@ -150,6 +153,8 @@ impl VaultMetadata {
                 new_for_client.files.push(server_file.clone());
             }
         }
+
+         */
 
         (new_for_client, new_for_server)
     }
@@ -394,10 +399,8 @@ pub fn convert_path_to_local(
 /// Goes through a vec of remote files, converts their path to work on the local system
 /// and saves to disk
 /// done in parallel for greater speed
-pub fn save_remote_files_to_disk(
-    files: Vec<RemoteFile>,
-    id_and_root_dirs: Vec<(i32, PathBuf)>
-) {
+
+pub fn save_remote_files_to_disk(files: Vec<RemoteFile>, id_and_root_dirs: Vec<(i32, PathBuf)>) {
     let iter = files.into_par_iter();
     let _ = iter.for_each(|file| {
         let mut local_root = &Default::default();
@@ -410,10 +413,22 @@ pub fn save_remote_files_to_disk(
             }
         }
 
-        let local_path = convert_path_to_local(&file.full_path, &file.absolute_root_dir, local_root);
+        let local_path =
+            convert_path_to_local(&file.full_path, &file.absolute_root_dir, local_root);
         fs::write(&local_path, file.contents)
             .expect(&*format!("Error writing {} to disk", local_path.display()));
+
+        set_modified_time(&local_path, file.modified_time);
     });
+}
+
+/// Update the metadata to ensure file won't be synced unnecessarily
+fn set_modified_time(path: &PathBuf, modified_time: i64) {
+    filetime::set_file_mtime(
+        path,
+        filetime::FileTime::from_unix_time(modified_time, 0),
+    )
+        .unwrap()
 }
 
 #[cfg(test)]

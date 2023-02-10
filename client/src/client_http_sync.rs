@@ -1,18 +1,10 @@
 use crate::client_db_api::load_file_metadata;
-use axum::http;
-use common::config_utils::{DirectoryConfig, VaultConfig};
-use common::file_utils::{FileMetadata, MetadataBlob, MetadataDiff};
+use common::file_utils::{MetadataBlob};
 use common::RemoteFile;
 use common::{common_db_utils, file_utils};
-use http::StatusCode;
 use reqwest::{Client, Url};
 use sqlx::{Pool, Sqlite};
-use std::collections::HashMap;
-use std::error::Error;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Barrier;
-use common::common_db_utils::read_file_contents_from_disk_and_metadata;
+use common::common_db_utils::{read_file_contents_from_disk_and_metadata, upsert_database};
 
 /// Main api that is called on launch of client
 /// Will make request to server for a list of all files and their metadata
@@ -24,8 +16,10 @@ pub async fn init_metadata_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sql
     // Gets metadata from server via http
     let (file_id, server_metadata) = get_metadata_from_server(&client, &url).await;
 
-    // Gets local metadata from DB - Also updates file id's to newest
+    // Gets local metadata from DB - Also updates file id's to newest based upon the latest_file_id
+    // received from server
     let local_metadata = load_file_metadata(pool, file_id).await?;
+    println!("local metadata: {:?}", local_metadata);
 
     // Gets metadata diff and sends it to server which is then inserted into db
     let metadata_diff = file_utils::get_metadata_diff(local_metadata, server_metadata);
@@ -34,20 +28,27 @@ pub async fn init_metadata_sync(url: Url, pool: &Pool<Sqlite>) -> Result<(), sql
     println!("new for client: {:?}", new_for_client);
     println!("new for server: {:?}", new_for_server);
 
-    //todo stop some of this metadata sending
-    //general structure should be:
-    //1. read files on disk for client and server
-    //2. client and server update their dbs
-    //3. client requests metadata from server
-    //4. client compares with their own local metadata
-    //5. client requests for files it needs to be updated and saves to disk
-    //6. client determines what files to send
-    //7. client reads files from disk and sends to server
-    //8. client updates db
-    //9. client sends message server, indicating to update db
-    //10. init sync is done
+    upsert_database(pool, new_for_client.clone().convert_to_metadata_vec()).await?;
 
     post_metadata_diff_to_server(&client, &url, &new_for_server).await;
+
+    //todo stop some of this metadata sending
+    //general structure should be:
+    //1. read files on disk for client and server [✅]
+    //2. client and server update their dbs [✅]
+    //3. client requests metadata from server [✅]
+    //4. client compares with their own local metadata [✅]
+    //5. client inserts the servers metadata [✅]
+    //6. client sends metadata to server
+    //7. server inserts the clients metadata
+    //8. client requests for files it needs to be updated and saves to disk - updating the metadata to what is stored in db
+    //9. client determines what files to send
+    //10. client reads files from disk and sends to server - server saves files - updating the metadata to what is stored in db
+    //11. client updates db
+    //12. client sends message server, indicating to update db
+    //13. init sync is done
+
+
 
     // requests for files from server to update and/or add, also upsert database
     let files = get_new_files_for_client(&client, &url, &new_for_client).await;

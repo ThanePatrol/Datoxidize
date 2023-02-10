@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("recreated db");
 
     tokio::task::spawn_blocking(move || {
-        common_db_utils::init_metadata_load_into_db(&pool2, true);
+        common_db_utils::init_metadata_into_db(&pool2, true);
     })
     .await
     .unwrap();
