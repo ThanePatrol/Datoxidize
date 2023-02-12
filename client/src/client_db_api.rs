@@ -1,12 +1,10 @@
 use common::common_db_utils::upsert_database;
 use common::file_utils::{FileMetadata, MetadataBlob, ServerPresent, VaultMetadata};
-use common::{common_db_utils, file_utils};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
-use sqlx::{ConnectOptions, Pool, Row, Sqlite, SqlitePool};
+use common::{file_utils};
+use sqlx::sqlite::{ SqlitePoolOptions, SqliteRow};
+use sqlx::{Pool, Row, Sqlite};
 use std::collections::HashMap;
-use std::error::Error;
 use std::path::PathBuf;
-use fs_extra::dir::DirEntryAttr::Path;
 
 pub async fn init_db(db_url: String) -> Result<Pool<Sqlite>, sqlx::Error> {
     let pool = SqlitePoolOptions::new()

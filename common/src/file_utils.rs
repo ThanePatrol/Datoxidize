@@ -163,7 +163,7 @@ impl VaultMetadata {
             for server_file in server.files.iter() {
                 //make sure we are comparing same file
                 if client_path_in_server_format == server_file.full_path {
-                    println!("comparing {:?} and {:?}", client_file, server_file);
+                    println!("comparing {:#?} and {:#?}", client_file, server_file);
                     // is client file newer than server file
                     if client_file.compare_to(&server_file) == 1 {
                         new_for_server.files.push(client_file.clone());
@@ -447,20 +447,25 @@ pub fn convert_path_to_local(
 /// done in parallel for greater speed
 
 pub fn save_remote_files_to_disk(files: Vec<RemoteFile>, id_and_root_dirs: Vec<(i32, PathBuf)>) {
-    let iter = files.into_par_iter();
-    let _ = iter.for_each(|file| {
+    /// Loops through all the vec of (vault_id, root_path) until the vault id of the file
+    /// is matched, then the root_path for that vault is returned
+    fn get_local_root(file: &RemoteFile, id_and_dirs: &Vec<(i32, PathBuf)>) -> PathBuf {
         let mut local_root = &Default::default();
-        //find matching vault while this is double work, the expected number of vaults shouldn't be
-        // high enough to cause an issue
-        for (id, local_r) in id_and_root_dirs.iter() {
+        for (id, local_r) in id_and_dirs.iter() {
             if *id == file.vault_id {
                 local_root = local_r;
                 break;
             }
         }
+        local_root.clone()
+    }
+
+    let iter = files.into_par_iter();
+    let _ = iter.for_each(|file| {
+        let local_root = get_local_root(&file, &id_and_root_dirs);
 
         let local_path =
-            convert_path_to_local(&file.full_path, &file.absolute_root_dir, local_root);
+            convert_path_to_local(&file.full_path, &file.absolute_root_dir, &local_root);
         fs::write(&local_path, file.contents)
             .expect(&*format!("Error writing {} to disk", local_path.display()));
 
