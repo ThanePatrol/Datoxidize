@@ -6,23 +6,18 @@ use crate::server_db_api::{
     get_metadata_blob, get_metadata_differences, insert_new_metadata_into_db,
 };
 use crate::server_sync_core::{get_remote_files_for_client, receive_files_from_client, save_user_required_files};
-use axum::extract::State;
-use axum::middleware::AddExtension;
 use axum::{
-    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Extension, Json, Router,
+     Json, Router,
 };
 use common::file_utils::FileMetadata;
-use common::{common_db_utils, file_utils, RemoteFile};
-use dotenvy::{dotenv, var};
+use common::{common_db_utils};
+use dotenvy::{var};
 use serde_json::{json, Value};
 use sqlx::{Pool, Sqlite};
 use std::error::Error;
-use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

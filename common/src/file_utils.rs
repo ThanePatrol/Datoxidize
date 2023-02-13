@@ -135,7 +135,7 @@ pub struct VaultMetadata {
 impl VaultMetadata {
     /// Returns a new VaultMetadata tuple, 0 idx is new for client, 1st is new for server
     pub fn get_differences_from_server(
-        &self,
+        &mut self,
         server: &VaultMetadata,
     ) -> (VaultMetadata, VaultMetadata) {
         let mut new_for_client = VaultMetadata {
@@ -148,7 +148,7 @@ impl VaultMetadata {
             vault_id: server.vault_id,
         };
 
-        for client_file in self.files.iter() {
+        for client_file in self.files.iter_mut() {
             //if client_file.present_on_server == ServerPresent::No {
             //    new_for_server.files.push(client_file.clone());
             //    continue;
@@ -172,6 +172,8 @@ impl VaultMetadata {
                     else if client_file.compare_to(&server_file) == -1 {
                         new_for_client.files.push(server_file.clone())
                     }
+
+                    client_file.file_id = server_file.file_id;
 
                     present = true;
                 }
@@ -296,7 +298,7 @@ pub fn get_metadata_diff(client: MetadataBlob, server: MetadataBlob) -> Metadata
     };
 
     let client_vaults = client.vaults;
-    for client_vault in client_vaults.into_iter() {
+    for mut client_vault in client_vaults.into_iter() {
         let vault_id = client_vault.0;
         let server_vault = server.vaults.get(&vault_id).unwrap();
 

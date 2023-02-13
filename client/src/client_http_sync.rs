@@ -4,7 +4,7 @@ use common::RemoteFile;
 use common::{common_db_utils, file_utils};
 use reqwest::{Client, Url};
 use sqlx::{Pool, Sqlite};
-use common::common_db_utils::{read_file_contents_from_disk_and_metadata, upsert_database};
+use common::common_db_utils::{read_file_contents_from_disk_and_metadata};
 
 /// Main api that is called on launch of client
 /// Will make request to server for a list of all files and their metadata

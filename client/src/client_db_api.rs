@@ -90,7 +90,7 @@ fn build_file_metadata_for_vault(
     rows.iter().for_each(|row| {
         let path = PathBuf::from(row.get::<String, _>(1));
         let absolute_root_dir = absolute_root_dir.clone();
-
+        println!("latest id: {id} and file id: {} for file {:?}", row.get::<i32, _>(0), path);
         let mut file = FileMetadata {
             full_path: path,
             root_directory: row.get::<String, _>(2),
