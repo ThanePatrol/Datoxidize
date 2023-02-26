@@ -1,10 +1,55 @@
-use std::collections::HashMap;
-use std::{fs};
-use std::path::{Path, PathBuf};
-use once_cell::sync::Lazy;
-use common::file_utils::{copy_file_to_server, get_server_path};
-use common::RemoteFile;
-use common::config_utils::{deserialize_vault_config, VaultConfig};
+use crate::ApiState;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::Json;
+use common::file_utils::{FileMetadata, MetadataBlob, ServerPresent};
+use common::{common_db_utils, file_utils, RemoteFile};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+pub async fn save_user_required_files(
+    State(state): State<Arc<Mutex<ApiState>>>,
+    Json(payload): Json<MetadataBlob>,
+) -> impl IntoResponse {
+    println!("client request: {:?}", payload);
+    let payload_on_server= payload
+        .convert_to_metadata_vec()
+        .into_iter()
+        .filter(|files| files.present_on_server == ServerPresent::Yes)
+        .collect::<Vec<FileMetadata>>();
+
+    state.lock().await.client_requested = payload_on_server;
+    StatusCode::OK
+}
+
+pub async fn get_remote_files_for_client(
+    State(state): State<Arc<Mutex<ApiState>>>,
+) -> impl IntoResponse {
+    let state = &state.lock().await;
+    let files =
+        common_db_utils::read_file_contents_from_disk_and_metadata(&state.pool, &state.client_requested)
+            .await;
+    Json(files)
+}
+
+pub async fn receive_files_from_client(
+    State(state): State<Arc<Mutex<ApiState>>>,
+    Json(payload): Json<Vec<RemoteFile>>
+) -> impl IntoResponse {
+    let state = &state.lock().await;
+    let vault_and_root_paths = common_db_utils::get_vault_id_and_root_directories(&state.pool)
+        .await
+        .expect(&*format!("Error reading from database with {:?}", payload));
+    file_utils::save_remote_files_to_disk(payload, vault_and_root_paths);
+    StatusCode::OK
+}
+
+/*-----------------------------OLD STUFF BELOW-----------------------------------------*/
+
+/*
+
+
 
 static VAULT_CONFIGS: Lazy<HashMap<i32, VaultConfig>> = Lazy::new(|| {
         deserialize_vault_config()
@@ -22,11 +67,11 @@ pub fn is_client_more_recent_than_server(remote: &RemoteFile, local: &PathBuf) -
     let server_metadata = fs::metadata(local)
         .expect(&*format!("Error reading metadata from {:?}", local));
 
-    let client_time = remote.metadata.1;
+    //remote.metadata.1;
     let server_time = server_metadata.modified()
         .expect(mdata_err_msg);
 
-    client_time > server_time
+    UNIX_EPOCH > server_time
 }
 
 //todo - set metadata from local to payload
@@ -39,7 +84,7 @@ pub async fn sync_file_with_server(payload: RemoteFile) -> bool {
     println!("Path: {}", server_file_path.display());
 
     if is_client_more_recent_than_server(&payload, &server_file_path) {
-        copy_file_to_server(&payload, &config).await.unwrap();
+        //copy_file_to_server(&payload, &config).await.unwrap();
         true
     } else {
         false
@@ -85,5 +130,4 @@ mod tests {
 
     }
 
-
-}
+*/

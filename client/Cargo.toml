@@ -16,7 +16,7 @@ dotenvy = "0.15.6"
 tokio = { version = "1.22.0", features = ["full"] }
 rustls = "0.20.7"
 notify = "5.0.0"
-axum = "0.6.1"
+axum = "0.6.4"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 rand = "0.8.4"
@@ -26,6 +26,8 @@ serial_test = "0.10.0"
 reqwest = { version = "0.11.13", features = ["json"] }
 common = { path = "../common" }
 backend = {path = "../backend" }
+sqlx = { version = "0.6.2", features = [ "runtime-tokio-rustls", "sqlite"]}
+
 
 [dev-dependencies]
 axum-test-helper = "0.2.0"
